@@ -4,6 +4,19 @@ TDx Project 409007
 
 ## Setup
 
-Make sure Rancher Desktop is installed and running (not Docker Desktop)
+1. Clone this repo
 
-Make a file called `.env` in the root of this repository. Copy the `env.example` contents into it and change the settings.
+2. Make sure Rancher Desktop is installed and running (not Docker Desktop)
+
+3. Make a file called `.env` in the root of this repository. Copy the `env.example` contents into it and change the settings.
+
+## Run
+
+In a terminal:
+
+```powershell
+cd <to your cloned the repo>
+docker compose up -d
+```
+
+In a browser: go to `127.0.0.1:8080`
