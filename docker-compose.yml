@@ -1,0 +1,11 @@
+services:
+  flet-app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USERNAME
+      - SMTP_PASSWORD
+      - CALENDAR_CSV
