@@ -9,3 +9,4 @@ services:
       - SMTP_USERNAME
       - SMTP_PASSWORD
       - CALENDAR_CSV
+      - LOG_LEVEL
