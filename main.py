@@ -38,5 +38,5 @@ if __name__ == "__main__":
     loader = data_loader.DataLoader(file_path="FacilitiesLinkClassScheduleDaily.csv")
     df = loader.load_data()
 
-    # app = InstructorContactSystem()
-    # ft.app(target=app.main, port=8080, view=ft.AppView.WEB_BROWSER)
+    app = InstructorContactSystem()
+    ft.run(target=app.main, port=8080, view=ft.AppView.WEB_BROWSER)
