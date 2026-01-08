@@ -2,12 +2,13 @@ import logging as log
 
 import pandas as pd
 
-from utils import raise_error_window
+from src.utils import raise_error_window
 
 
 class DataLoader:
     def __init__(self, file_path: str):
         self.file_path = file_path
+        log.debug(f"DataLoader initialized with file path: {file_path}")
 
     def load_data(self) -> pd.DataFrame:
         log.debug(f"Loading data from {self.file_path}")
