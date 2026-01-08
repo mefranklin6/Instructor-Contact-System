@@ -1,17 +1,23 @@
 import logging as log
+import os
+from datetime import datetime
+from typing import Optional
 
 import pandas as pd
-from datetime import datetime
 
-from src.utils import raise_error_window
+from src.utils import csv_to_dataframe, raise_error_window
 
 
 class DataLoader:
-    def __init__(self, file_path: str):
+    def __init__(
+        self,
+        file_path: str,
+        supported_locations: Optional[list[tuple[str, str]]] = None,
+    ) -> None:
         self.file_path = file_path
-        log.debug(f"DataLoader initialized with file path: {file_path}")
+        self.supported_locations = supported_locations
 
-    def load_semester_data(self, date: datetime) -> pd.DataFrame:
+    def semester_data(self, date: datetime) -> pd.DataFrame:
         """
         Load and filter data to include only classes within the semester of the given date.
         Args:
@@ -24,43 +30,17 @@ class DataLoader:
         df = self._filter_to_semester(df, date)
         return df
 
-    def load_range_data(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-        log.error("load_range_data method not yet implemented.")  # TODO
+    def range_data(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
+        log.error("range_data method not yet implemented.")  # TODO
         return pd.DataFrame()
 
     def _load_and_clean(self) -> pd.DataFrame:
-        df = self._csv_to_dataframe()
+        df = csv_to_dataframe(self.file_path)
         df = self._clean_dataframe(df)
         df = self._convert_dates(df)
+        if self.supported_locations:
+            df = self._filter_to_supported_locations(df)
         return df
-
-    def _csv_to_dataframe(self) -> pd.DataFrame:
-        """Load data from a CSV file into a pandas DataFrame."""
-        try:
-            data = pd.read_csv(self.file_path)
-            return data
-        except FileNotFoundError:
-            raise_error_window(
-                f"The file at {self.file_path} was not found.", title="File Not Found"
-            )
-            return pd.DataFrame()
-        except pd.errors.EmptyDataError:
-            raise_error_window(
-                f"The file at {self.file_path} is empty.", title="Empty File"
-            )
-            return pd.DataFrame()
-        except pd.errors.ParserError:
-            raise_error_window(
-                f"There was a CSV parsing error while reading the file at {self.file_path}.",
-                title="Parsing Error",
-            )
-            return pd.DataFrame()
-        except Exception as e:
-            raise_error_window(
-                f"An unexpected error occurred while reading the file at {self.file_path}: {str(e)}",
-                title="Unexpected Error",
-            )
-            return pd.DataFrame()
 
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -82,6 +62,9 @@ class DataLoader:
             ]
             filtered_df = df.dropna(subset=required_columns)
             filtered_df = filtered_df[filtered_df["ROOM"] != "WWW"]
+            filtered_df = filtered_df[filtered_df["BUILDING"] != "WWW"]
+            filtered_df = filtered_df[filtered_df["ROOM"] != "ONLINE"]
+            filtered_df = filtered_df[filtered_df["BUILDING"] != "ONLINE"]
             filtered_df = filtered_df[filtered_df["DAYS1"] != "TBA"]
             log.debug(
                 f"{initial_rows - len(filtered_df)} rows initially cleansed. Initial size: {initial_rows}, Filtered size: {len(filtered_df)}"
@@ -115,15 +98,24 @@ class DataLoader:
 
     def _filter_to_semester(self, df: pd.DataFrame, date: datetime) -> pd.DataFrame:
         try:
-            filtered_df = df[
-                (df["CLASS_START_DATE"].astype(str).str[:10] <= str(date))
-                & (df["CLASS_END_DATE"].astype(str).str[:10] >= str(date))
+            before_rows = len(df)
+            target_date = pd.to_datetime(date).normalize()  # Strip time component
+            df = df[
+                (df["CLASS_START_DATE"] <= target_date)
+                & (df["CLASS_END_DATE"] >= target_date)
             ]
 
+            # All classes within a semester should have the same TERM value
+            term_is_all_the_same = df["TERM"].nunique() <= 1
+            if term_is_all_the_same:
+                log.debug(f"All rows have the same TERM value: {df['TERM'].iloc[0]}")
+            else:
+                log.warning(f"Multiple TERM values found: {df['TERM'].unique()}")
+
             log.debug(
-                f"Filtered to current semester. Rows before: {len(df)}, Rows after: {len(filtered_df)}"
+                f"Filtered to current semester. Rows before: {before_rows}, Rows after: {len(df)}"
             )
-            return filtered_df
+            return df
         except Exception as e:
             raise_error_window(
                 f"An error occurred while filtering to the current semester: {str(e)}",
@@ -132,6 +124,23 @@ class DataLoader:
             log.error(f"Semester filtering error: {str(e)}")
             return pd.DataFrame()
 
+    def _filter_to_supported_locations(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            initial_rows = len(df)
 
-if __name__ == "__main__":
-    pass
+            supported_set = set(self.supported_locations or [])
+            df["_location_tuple"] = list(zip(df["BUILDING"], df["ROOM"]))
+            df = df[df["_location_tuple"].isin(supported_set)]
+            df = df.drop(columns=["_location_tuple"])
+            log.debug(
+                f"Filtered to supported locations. Rows before: {initial_rows}, Rows after: {len(df)}"
+            )
+            return df
+
+        except Exception as e:
+            raise_error_window(
+                f"An error occurred while filtering to supported locations: {str(e)}",
+                title="Supported Locations Filtering Error",
+            )
+            log.error(f"Supported locations filtering error: {str(e)}")
+            return pd.DataFrame()
