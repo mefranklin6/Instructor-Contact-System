@@ -2,16 +2,20 @@
 This is the main entry file
 
 This file should:
-- Import the individual modules
+- Import and instantiate the individual modules
 - Run Flet
 """
 
+import os
+
 import flet as ft
+
+from src import utils
 
 
 class InstructorContactSystem:
     def __init__(self):
-        pass
+        self.logging_level = os.getenv("LOGGING_LEVEL", "DEBUG").upper()
 
     def main(self, page: ft.Page):
         page.title = "Instructor Contact System"
