@@ -41,7 +41,7 @@ In a terminal:
 
 ```powershell
 cd <to your cloned the repo>
-docker compose up -d
+docker compose down --rmi local --remove-orphans; docker compose up --build --force-recreate --renew-anon-volumes
 ```
 
 In a browser: go to `127.0.0.1:8080`
