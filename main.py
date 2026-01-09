@@ -69,10 +69,26 @@ if __name__ == "__main__":
 
     print(f"\nFound {len(contact_dict)} instructors")
 
-    # b = aggregator.by_location()
-    # print(f"Found {len(b)} locations")
-    # for location, instructors in list(b.items()):
-    #     print(f"{location}: {instructors}")
+    # ---- Test for Matcher module ----
+    log.warning("Testing Matcher module...")
+    import src.id_username_matcher.matcher as matcher
+
+    id_matcher = matcher.Matcher(csv_file_path="zoomus_users (1).csv")
+    email_contact_dict = id_matcher.match_id_to_email(contact_dict)
+
+    # Save email-based output
+    with open("aggregated_output_with_emails.json", "w") as f:
+        json.dump(email_contact_dict, f, indent=2)
+
+    print(f"\nMatched {len(email_contact_dict)} instructors with emails")
+    print(f"Sample output (first 3 instructors with emails):")
+    for i, (email, locations) in enumerate(list(email_contact_dict.items())[:3]):
+        print(f"  {email}: {locations}")
+
+    b = aggregator.by_location()
+    print(f"Found {len(b)} locations")
+    for location, instructors in list(b.items()):
+        print(f"{location}: {instructors}")
 
     # app = InstructorContactSystem()
     # ft.run(target=app.main, port=8080, view=ft.AppView.WEB_BROWSER)
