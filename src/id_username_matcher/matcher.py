@@ -43,35 +43,19 @@ class Matcher:
                     email_str = str(email).strip()
                     mapping[emp_id_str] = email_str
                 except (ValueError, TypeError) as e:
-                    log.debug(f"Skipping invalid Employee ID: {emp_id}")
+                    log.error(f"Skipping invalid Employee ID: {emp_id}")
                     continue
 
         log.info(f"Loaded {len(mapping)} ID to email mappings")
         return mapping
 
-    def match_id_to_email(self, instructor_dict: dict) -> dict:
-        """Replace employee IDs with emails in the instructor dictionary.
+    def match_id_to_email(self, emp_id: str) -> str:
+        """Match a single Employee ID to an email.
 
         Args:
-            instructor_dict: Dictionary with Employee IDs as keys and locations as values
+            emp_id: Employee ID to match
 
         Returns:
-            Dictionary with emails as keys and locations as values
+            Corresponding email if found, else None
         """
-        result = {}
-        missing_ids = []
-
-        for emp_id, locations in instructor_dict.items():
-            email = self.id_to_email_map.get(emp_id)
-
-            if email:
-                result[email] = locations
-            else:
-                missing_ids.append(emp_id)
-                log.warning(f"No email found for Employee ID: {emp_id}")
-
-        log.info(f"Matched {len(result)} instructors with emails")
-        if missing_ids:
-            log.warning(f"Missing email mappings for {len(missing_ids)} employee IDs")
-
-        return result
+        return self.id_to_email_map.get(emp_id, "")
