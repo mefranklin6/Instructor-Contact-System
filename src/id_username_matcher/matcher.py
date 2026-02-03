@@ -22,29 +22,31 @@ class Matcher:
         log.debug(f"Loading ID to email mapping from {self.csv_file_path}")
         df = pd.read_csv(self.csv_file_path)
 
-        # Create mapping, filtering out rows with missing Employee ID
-        mapping = {}
-        for _, row in df.iterrows():
-            emp_id = row.get("Employee ID")
-            email = row.get("Email")
+        # Filter out rows with missing Employee ID or Email
+        df = df.dropna(subset=["Employee ID", "Email"])
 
-            if pd.notna(emp_id) and pd.notna(email):
-                try:
-                    # Convert to string and remove any whitespace
-                    # Handle cases where emp_id might already be a string or contain non-numeric data
-                    emp_id_str = str(emp_id).strip()
+        # Convert to strings and strip whitespace
+        df["Employee ID"] = df["Employee ID"].astype(str).str.strip()
+        df["Email"] = df["Email"].astype(str).str.strip()
 
-                    # Skip if it looks like an email or is not numeric
-                    if "@" in emp_id_str or not emp_id_str.replace(".", "").isdigit():
-                        continue
+        # Filter out empty strings
+        df = df[(df["Employee ID"] != "") & (df["Email"] != "")]
 
-                    # Pad with zeros to 9 digits if needed
-                    emp_id_str = str(int(float(emp_id_str))).zfill(9)
-                    email_str = str(email).strip()
-                    mapping[emp_id_str] = email_str
-                except (ValueError, TypeError) as e:
-                    log.error(f"Skipping invalid Employee ID: {emp_id}")
-                    continue
+        # Filter out Employee IDs that contain "@" or are not numeric
+        df = df[~df["Employee ID"].str.contains("@", na=False)]
+        df = df[df["Employee ID"].str.replace(".", "", regex=False).str.isdigit()]
+
+        # Convert to numeric and pad with zeros to 9 digits
+        df["Employee ID"] = (
+            df["Employee ID"].astype(float).astype(int).astype(str).str.zfill(9)
+        )
+
+        # Filter out invalid emails (must contain "@" and not be empty)
+        df = df[df["Email"].str.contains("@", na=False)]
+        df = df[df["Email"] != ""]
+
+        # Create mapping dictionary
+        mapping = df.set_index("Employee ID")["Email"].to_dict()
 
         log.info(f"Loaded {len(mapping)} ID to email mappings")
         return mapping
