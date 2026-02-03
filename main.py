@@ -74,8 +74,11 @@ if __name__ == "__main__":
 
     id_matcher = matcher.Matcher(csv_file_path="zoomus_users (1).csv")
     email_contact_dict = {
-        id_matcher.match_id_to_email(emp_id): locations
+        email: locations
         for emp_id, locations in contact_dict.items()
+        if (
+            email := id_matcher.match_id_to_email(emp_id)
+        )  # Only include if email is not empty
     }
 
     # Save email-based output
