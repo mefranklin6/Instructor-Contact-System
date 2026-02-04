@@ -4,6 +4,9 @@ import pandas as pd
 
 
 class Aggregator:
+    """
+    param df: The cleansed dataframe derived from the FacilitiesLink schedule CSV
+    """
     def __init__(self, df: pd.DataFrame) -> None:
         self.df = df
 

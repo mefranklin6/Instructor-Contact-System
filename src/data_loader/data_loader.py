@@ -9,12 +9,20 @@ from src.utils import csv_to_dataframe, raise_error_window
 
 
 class DataLoader:
+    """
+    Args:
+        fl_file_path: The calendar CSV that gets exported to FacilitiesLink
+
+        supported_locations: optional list of tuples (building, room) you want included.
+        If used, any location not in the list will be filtered out
+    """
+
     def __init__(
         self,
-        file_path: str,
+        fl_file_path: str,
         supported_locations: Optional[list[tuple[str, str]]] = None,
     ) -> None:
-        self.file_path = file_path
+        self.file_path = fl_file_path
         self.supported_locations = supported_locations
 
     def semester_data(self, date: datetime) -> pd.DataFrame:
