@@ -70,9 +70,9 @@ if __name__ == "__main__":
 
     # ---- Test for Matcher module ----
     log.warning("Testing Matcher module...")
-    import src.id_username_matcher.matcher as matcher
+    import id_username_matcher.matcher_from_zoom_users as matcher_from_zoom_users
 
-    id_matcher = matcher.Matcher(csv_file_path="zoomus_users (1).csv")
+    id_matcher = matcher_from_zoom_users.Matcher(csv_file_path="zoomus_users (1).csv")
     email_contact_dict = {
         email: locations
         for emp_id, locations in contact_dict.items()
