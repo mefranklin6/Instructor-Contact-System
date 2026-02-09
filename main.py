@@ -5,6 +5,8 @@ Main entry file
 - Runs Flet
 """
 
+DEV_MODE = False
+
 import json
 import logging as log
 import os
@@ -22,7 +24,13 @@ else:
 
 from src import data_loader
 from src import id_matcher_from_zoom_users as matcher
-from messages_ import default_semester_start_message
+from messages_ import (
+    default_semester_start_message,
+    default_room_contact_message,
+    default_room_contact_subject,
+    default_semester_start_subject,
+)
+from src import email_sender
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -39,7 +47,7 @@ class InstructorContactSystem:
         self.loader = None
         self.aggregator = None
         self.id_matcher = None
-        self.default_semester_start_msg = None
+        self.email_sender = None
         self.contact_by_instructor = {}
         self.contact_by_location = {}
         self.contacted_instructors = {}
@@ -75,6 +83,8 @@ class InstructorContactSystem:
             if not self.id_matcher:
                 log.critical("ID matcher not loaded")
                 exit(1)
+
+            self.email_sender = email_sender.EmailSender()
 
             log.info("Data initialization successful")
         except Exception as e:
@@ -175,32 +185,51 @@ class InstructorContactSystem:
 
             message = message_template.format(location=location_key)
 
-            # Simulated send
+            if not self.email_sender:
+                self._show_snack(page, "Email sender is not configured")
+                return
+
             sent_count = 0
+            failed = []
             self._load_contacted_instructors()
             for email in emails:
-                log.warning(f"[SIMULATED] Would send classroom email to {email}")
-                log.debug(f"Message: {message}")
-                existing = self.contacted_instructors.get(email, {})
-                history = existing.get("classroom_messages", [])
-                history.append(
-                    {
-                        "sent_at": datetime.now().isoformat(),
-                        "location": location_key,
-                        "message": message,
-                    }
-                )
-                existing["classroom_messages"] = history
-                self.contacted_instructors[email] = existing
-                sent_count += 1
+                ok = False
+                try:
+                    subject = default_room_contact_subject
+                    ok = bool(self.email_sender.send(email, subject, message))
+                    log.info(f"Sent: {email}, subject: {subject}, message: {message}")
+                except Exception as e:
+                    log.error(f"Email send failed to {email}: {str(e)}")
+
+                if ok:
+                    existing = self.contacted_instructors.get(email, {})
+                    history = existing.get("classroom_messages", [])
+                    history.append(
+                        {
+                            "sent_at": datetime.now().isoformat(),
+                            "location": location_key,
+                            "message": message,
+                        }
+                    )
+                    existing["classroom_messages"] = history
+                    self.contacted_instructors[email] = existing
+                    sent_count += 1
+                else:
+                    failed.append(email)
 
             self._save_contacted_instructors()
 
             summary = f"""Classroom Message Sent
 
 Location: {location_key}
-Sent to: {sent_count}
+Sent: {sent_count}
+Failed: {len(failed)}
 """
+
+            if failed:
+                summary += "\nFailed recipients:\n" + "\n".join(failed[:50])
+                if len(failed) > 50:
+                    summary += f"\n...and {len(failed) - 50} more"
 
             dialog = ft.AlertDialog(
                 title=ft.Text("Send complete"),
@@ -313,8 +342,8 @@ Message template includes instructor locations via {{locations}}.
                 content=ft.Container(ft.Text(body), padding=ft.Padding.all(8)),
                 actions=[
                     ft.FilledButton(
-                        "Proceed",
-                        icon=ft.Icons.PLAY_ARROW,
+                        "Send",
+                        icon=ft.Icons.SEND,
                         on_click=lambda e: self._execute_deployment(
                             page, all_instructors, message_template, batch_size
                         ),
@@ -339,25 +368,39 @@ Message template includes instructor locations via {{locations}}.
     ):
         try:
             batch_count = 0
+            failed = []
+
+            if not self.email_sender:
+                self._show_snack(page, "Email sender is not configured")
+                return
+
+            subject = default_semester_start_message
 
             for instructor in instructors[:batch_size]:
                 if instructor["email"] not in self.contacted_instructors:
                     locations_str = ", ".join(instructor["locations"])
                     message = message_template.format(locations=locations_str)
+                    ok = False
+                    try:
+                        ok = bool(
+                            self.email_sender.send(
+                                instructor["email"], subject, message
+                            )
+                        )
+                    except Exception as e:
+                        log.error(
+                            f"Email send failed to {instructor['email']}: {str(e)}"
+                        )
 
-                    # TODO: Actually send email here
-                    log.warning(
-                        f"[SIMULATED] Would send email to {instructor['email']}"
-                    )
-                    log.warning(message)
-                    log.debug(f"Message: {message}")
-
-                    self.contacted_instructors[instructor["email"]] = {
-                        "contacted_at": datetime.now().isoformat(),
-                        "locations": instructor["locations"],
-                        "message": message,
-                    }
-                    batch_count += 1
+                    if ok:
+                        self.contacted_instructors[instructor["email"]] = {
+                            "contacted_at": datetime.now().isoformat(),
+                            "locations": instructor["locations"],
+                            "message": message,
+                        }
+                        batch_count += 1
+                    else:
+                        failed.append(instructor["email"])
 
             self._save_contacted_instructors()
 
@@ -380,9 +423,15 @@ Message template includes instructor locations via {{locations}}.
 Contacted this batch: {batch_count}
 Total contacted: {contacted}
 Remaining: {remaining}
+Failed this batch: {len(failed)}
 
 Progress: {contacted}/{total_instructors}
 """
+
+            if failed:
+                summary += "\nFailed recipients:\n" + "\n".join(failed[:50])
+                if len(failed) > 50:
+                    summary += f"\n...and {len(failed) - 50} more"
 
             dialog = ft.AlertDialog(
                 title=ft.Text("Deployment Complete"),
@@ -429,7 +478,7 @@ Progress: {contacted}/{total_instructors}
 
             message_input = ft.TextField(
                 label="Message template",
-                value="Hello,\n The CTS supported classroom: {location}",
+                value=default_room_contact_message,
                 multiline=True,
                 min_lines=4,
                 max_lines=8,
@@ -450,12 +499,82 @@ Progress: {contacted}/{total_instructors}
                 if not message_input.value:
                     self._show_snack(page, "Please enter a message")
                     return
-                self._send_message_to_classroom(
-                    page,
-                    building_input.value,
-                    room_input.value,
-                    message_input.value,
+
+                location_key = (
+                    f"{building_input.value.upper()} {room_input.value.upper()}"
                 )
+                if location_key not in self.contact_by_location:
+                    self._show_snack(page, f"No classes found in {location_key}")
+                    return
+
+                emp_ids = self.contact_by_location[location_key]
+                emails = []
+                for emp_id in emp_ids:
+                    email = self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                    if email:
+                        emails.append(email)
+
+                seen = set()
+                emails = [
+                    email for email in emails if not (email in seen or seen.add(email))
+                ]
+
+                if not emails:
+                    self._show_snack(
+                        page,
+                        "No email matches found for instructors in this location",
+                    )
+                    return
+
+                try:
+                    rendered_message = message_input.value.format(location=location_key)
+                except KeyError as ke:
+                    self._show_snack(page, f"Missing placeholder in message: {str(ke)}")
+                    return
+
+                recipients_text = "\n".join(emails)
+                confirm_body = (
+                    f"Are you sure you want to send this message to these recipients?\n\n"
+                    f"Message:\n{rendered_message}\n\n"
+                    f"Recipients ({len(emails)}):\n{recipients_text}"
+                )
+
+                dialog = ft.AlertDialog(
+                    title=ft.Text("Confirm send"),
+                    content=ft.Container(
+                        content=ft.Column(
+                            [ft.Text(confirm_body, selectable=True)],
+                            scroll=ft.ScrollMode.AUTO,
+                            height=360,
+                            width=640,
+                            tight=True,
+                        ),
+                        padding=ft.Padding.all(12),
+                    ),
+                    actions=[
+                        ft.OutlinedButton(
+                            "Cancel",
+                            icon=ft.Icons.CLOSE,
+                            on_click=lambda e: self._close_dialog(page),
+                        ),
+                        ft.FilledButton(
+                            "Send",
+                            icon=ft.Icons.SEND,
+                            on_click=lambda e: (
+                                self._close_dialog(page),
+                                self._send_message_to_classroom(
+                                    page,
+                                    building_input.value,
+                                    room_input.value,
+                                    message_input.value,
+                                ),
+                            ),
+                        ),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+                page.show_dialog(dialog)
+                page.update()
 
             return ft.Container(
                 content=ft.Column(
@@ -567,10 +686,6 @@ Progress: {contacted}/{total_instructors}
                             size=24,
                             weight=ft.FontWeight.W_600,
                         ),
-                        ft.Text(
-                            "'{locations}' is a list of classrooms that an instructor teaches in",
-                            size=8,
-                        ),
                         already_contacted_text,
                         message_input,
                         ft.Row(
@@ -578,7 +693,7 @@ Progress: {contacted}/{total_instructors}
                                 batch_size_input,
                                 ft.FilledButton(
                                     "Start deployment",
-                                    icon=ft.Icons.SEND,
+                                    icon=ft.Icons.PLAY_ARROW,
                                     on_click=on_start,
                                 ),
                             ],
