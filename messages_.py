@@ -1,3 +1,5 @@
+default_semester_start_subject = "Classroom Technology Check-In"
+
 # '{locations}' will be replaced with a list of every supported classroom that an instructor teaches in
 default_semester_start_message = """Hello,
 We are staff of Classroom Technology Services, and we are reaching out regarding the technology in : {locations}
@@ -8,3 +10,11 @@ Best regards,
 Classroom Technology Services
 classroom@csuchico.edu
 530-898-5475"""
+
+# ------------------------------------------------------------------------------------------------------------------
+
+default_room_contact_subject = "Classroom Technology Update"
+
+default_room_contact_message = """Hello,
+The CTS supported classroom: {location},
+<insert reason for contact here>"""
