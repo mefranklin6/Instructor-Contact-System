@@ -13,7 +13,10 @@ from datetime import datetime
 import flet as ft
 
 from src import utils
-from src.data_loader import data_loader
+from src import data_loader
+from src import chico_supported_location_parser as slp
+from src import aggregator as agg
+from src import id_matcher_from_zoom_users as matcher
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "DEBUG").upper()
 log.basicConfig(
@@ -28,7 +31,6 @@ class InstructorContactSystem:
         self.supported_locations_filter = False
         if os.getenv("SUPPORTED_LOCATIONS_FILE_PATH"):
             self.supported_locations_filter = True
-            import src.chico_supported_locations.parser as slp
 
     def main(self, page: ft.Page):
         page.title = "Instructor Contact System"
@@ -40,7 +42,6 @@ if __name__ == "__main__":
 
     # ---- Test for SupportedLocationsParser module ----
     log.warning("Testing SupportedLocationsParser module...")
-    import src.chico_supported_locations.parser as slp
 
     parser = slp.SupportedLocationsParser("Supported Locations.csv")
     locations = parser.run()
@@ -49,17 +50,16 @@ if __name__ == "__main__":
     # ---- Test for DataLoader module ----
     log.warning("Testing DataLoader module...")
     loader = data_loader.DataLoader(
-        file_path="FacilitiesLinkClassScheduleDaily.csv", supported_locations=locations
+        fl_file_path="FacilitiesLinkClassScheduleDaily.csv",
+        supported_locations=locations,
     )
-    date = datetime(2025, 1, 22)
+    date = datetime(2026, 1, 22)
     df = loader.semester_data(date)
     df.to_csv("test_output.csv", index=False)
 
     # # ---- Test for Aggregator module ----
     log.warning("Testing Aggregator module...")
     import json
-
-    import src.aggregation.aggregator as agg
 
     aggregator = agg.Aggregator(df=df)
     contact_dict = aggregator.by_instructor()
@@ -70,9 +70,8 @@ if __name__ == "__main__":
 
     # ---- Test for Matcher module ----
     log.warning("Testing Matcher module...")
-    import id_username_matcher.matcher_from_zoom_users as matcher_from_zoom_users
 
-    id_matcher = matcher_from_zoom_users.Matcher(csv_file_path="zoomus_users (1).csv")
+    id_matcher = matcher.Matcher(csv_file_path="zoomus_users.csv")
     email_contact_dict = {
         email: locations
         for emp_id, locations in contact_dict.items()
@@ -88,16 +87,16 @@ if __name__ == "__main__":
     print(f"\nMatched {len(email_contact_dict)} instructors with emails")
 
     # ---- Test for location-based aggregation ----
-    # log.warning("Testing location-based aggregation...")
-    # b = aggregator.by_location()
-    # print(f"Found {len(b)} locations")
-    # for location, emp_ids in list(b.items()):
-    #     emails = [
-    #         id_matcher.match_id_to_email(emp_id)
-    #         for emp_id in emp_ids
-    #         if id_matcher.match_id_to_email(emp_id)
-    #     ]
-    #     print(f"  {location}: {emails}")
+    log.warning("Testing location-based aggregation...")
+    b = aggregator.by_location()
+    print(f"Found {len(b)} locations")
+    for location, emp_ids in list(b.items()):
+        emails = [
+            id_matcher.match_id_to_email(emp_id)
+            for emp_id in emp_ids
+            if id_matcher.match_id_to_email(emp_id)
+        ]
+        print(f"  {location}: {emails}")
 
     # app = InstructorContactSystem()
     # ft.run(target=app.main, port=8080, view=ft.AppView.WEB_BROWSER)
