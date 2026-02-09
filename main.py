@@ -5,10 +5,10 @@ Main entry file
 - Runs Flet
 """
 
+import json
 import logging as log
 import os
 from datetime import datetime
-import json
 
 import flet as ft
 
@@ -22,6 +22,7 @@ else:
 
 from src import data_loader
 from src import id_matcher_from_zoom_users as matcher
+from messages_ import default_semester_start_message
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -38,9 +39,12 @@ class InstructorContactSystem:
         self.loader = None
         self.aggregator = None
         self.id_matcher = None
+        self.default_semester_start_msg = None
         self.contact_by_instructor = {}
         self.contact_by_location = {}
         self.contacted_instructors = {}
+        self._clipboard = None
+        self._deployment_already_contacted_text = None
 
         self._initialize_data()
 
@@ -68,12 +72,22 @@ class InstructorContactSystem:
 
             zoom_file = os.getenv("ZOOM_FILE_PATH", "zoomus_users.csv")
             self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
+            if not self.id_matcher:
+                log.critical("ID matcher not loaded")
+                exit(1)
 
             log.info("Data initialization successful")
         except Exception as e:
             log.error(f"Error initializing data: {str(e)}")
 
     # ---------- Flet 0.80.x helpers ----------
+
+    def _get_clipboard(self, page: ft.Page) -> ft.Clipboard:
+        if self._clipboard is None:
+            self._clipboard = ft.Clipboard()
+            page.overlay.append(self._clipboard)
+            page.update()
+        return self._clipboard
 
     def _show_snack(self, page: ft.Page, message: str):
         page.show_dialog(ft.SnackBar(ft.Text(message)))
@@ -86,10 +100,6 @@ class InstructorContactSystem:
     def _create_copyable_dialog(
         self, page: ft.Page, title: str, content: str
     ) -> ft.AlertDialog:
-        def copy_to_clipboard(e):
-            page.set_clipboard(content)
-            self._show_snack(page, "Copied to clipboard!")
-
         return ft.AlertDialog(
             title=ft.Text(title),
             content=ft.Container(
@@ -100,20 +110,114 @@ class InstructorContactSystem:
                     width=560,
                     tight=True,
                 ),
-                padding=ft.padding.all(12),
+                padding=ft.Padding.all(12),
             ),
             actions=[
-                ft.FilledButton(
-                    "Copy all",
-                    icon=ft.Icons.CONTENT_COPY,
-                    on_click=copy_to_clipboard,
-                ),
                 ft.TextButton("Close", on_click=lambda e: self._close_dialog(page)),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
     # ---------- App logic ----------
+
+    def _load_contacted_instructors(self):
+        contact_file = "contacted_instructors.json"
+        if os.path.exists(contact_file):
+            with open(contact_file, "r") as f:
+                self.contacted_instructors = json.load(f)
+        else:
+            self.contacted_instructors = {}
+
+    def _get_already_contacted_count(self) -> int:
+        contact_file = "contacted_instructors.json"
+        if not os.path.exists(contact_file):
+            return 0
+        try:
+            with open(contact_file, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return len(data)
+            return 0
+        except Exception:
+            return 0
+
+    def _save_contacted_instructors(self):
+        contact_file = "contacted_instructors.json"
+        with open(contact_file, "w") as f:
+            json.dump(self.contacted_instructors, f, indent=2)
+
+    def _send_message_to_classroom(
+        self, page: ft.Page, building: str, room: str, message_template: str
+    ):
+        try:
+            location_key = f"{building.upper()} {room.upper()}"
+
+            if location_key not in self.contact_by_location:
+                self._show_snack(page, f"No classes found in {location_key}")
+                return
+
+            emp_ids = self.contact_by_location[location_key]
+            emails = []
+            for emp_id in emp_ids:
+                email = self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                if email:
+                    emails.append(email)
+
+            # de-dupe but keep stable order
+            seen = set()
+            emails = [e for e in emails if not (e in seen or seen.add(e))]
+
+            if not emails:
+                self._show_snack(
+                    page, "No email matches found for instructors in this location"
+                )
+                return
+
+            message = message_template.format(location=location_key)
+
+            # Simulated send
+            sent_count = 0
+            self._load_contacted_instructors()
+            for email in emails:
+                log.warning(f"[SIMULATED] Would send classroom email to {email}")
+                log.debug(f"Message: {message}")
+                existing = self.contacted_instructors.get(email, {})
+                history = existing.get("classroom_messages", [])
+                history.append(
+                    {
+                        "sent_at": datetime.now().isoformat(),
+                        "location": location_key,
+                        "message": message,
+                    }
+                )
+                existing["classroom_messages"] = history
+                self.contacted_instructors[email] = existing
+                sent_count += 1
+
+            self._save_contacted_instructors()
+
+            summary = f"""Classroom Message Sent
+
+Location: {location_key}
+Sent to: {sent_count}
+"""
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("Send complete"),
+                content=ft.Container(ft.Text(summary), padding=ft.Padding.all(8)),
+                actions=[
+                    ft.TextButton("Close", on_click=lambda e: self._close_dialog(page)),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            page.show_dialog(dialog)
+            page.update()
+
+        except KeyError as ke:
+            self._show_snack(page, f"Missing placeholder in message: {str(ke)}")
+        except Exception as e:
+            log.error(f"Error sending classroom message: {str(e)}")
+            self._show_snack(page, f"Error: {str(e)}")
 
     def _lookup_classroom(self, page: ft.Page, building: str, room: str):
         try:
@@ -125,9 +229,9 @@ class InstructorContactSystem:
 
             emp_ids = self.contact_by_location[location_key]
             emails = [
-                self.id_matcher.match_id_to_email(emp_id)
+                self.id_matcher.match_id_to_email(emp_id)  # type: ignore
                 for emp_id in emp_ids
-                if self.id_matcher.match_id_to_email(emp_id)
+                if self.id_matcher.match_id_to_email(emp_id)  # type: ignore
             ]
 
             if not emails:
@@ -152,7 +256,7 @@ class InstructorContactSystem:
         try:
             emp_id = None
             for eid in self.contact_by_instructor:
-                if self.id_matcher.match_id_to_email(eid) == email:
+                if self.id_matcher.match_id_to_email(eid) == email:  # type: ignore
                     emp_id = eid
                     break
 
@@ -177,16 +281,11 @@ class InstructorContactSystem:
         self, page: ft.Page, message_template: str, batch_size: int
     ):
         try:
-            contact_file = "contacted_instructors.json"
-            if os.path.exists(contact_file):
-                with open(contact_file, "r") as f:
-                    self.contacted_instructors = json.load(f)
-            else:
-                self.contacted_instructors = {}
+            self._load_contacted_instructors()
 
             all_instructors = []
             for emp_id in self.contact_by_instructor:
-                email = self.id_matcher.match_id_to_email(emp_id)
+                email = self.id_matcher.match_id_to_email(emp_id)  # type: ignore
                 if email and email not in self.contacted_instructors:
                     all_instructors.append(
                         {
@@ -211,7 +310,7 @@ Message template includes instructor locations via {{locations}}.
 
             dialog = ft.AlertDialog(
                 title=ft.Text("Semester Deployment"),
-                content=ft.Container(ft.Text(body), padding=ft.padding.all(8)),
+                content=ft.Container(ft.Text(body), padding=ft.Padding.all(8)),
                 actions=[
                     ft.FilledButton(
                         "Proceed",
@@ -239,7 +338,6 @@ Message template includes instructor locations via {{locations}}.
         self, page: ft.Page, instructors: list, message_template: str, batch_size: int
     ):
         try:
-            contact_file = "contacted_instructors.json"
             batch_count = 0
 
             for instructor in instructors[:batch_size]:
@@ -261,14 +359,19 @@ Message template includes instructor locations via {{locations}}.
                     }
                     batch_count += 1
 
-            with open(contact_file, "w") as f:
-                json.dump(self.contacted_instructors, f, indent=2)
+            self._save_contacted_instructors()
+
+            if self._deployment_already_contacted_text is not None:
+                self._deployment_already_contacted_text.value = (
+                    f"Already contacted: {len(self.contacted_instructors)}"
+                )
+                page.update()
 
             contacted = len(self.contacted_instructors)
             total_instructors = sum(
                 1
                 for emp_id in self.contact_by_instructor
-                if self.id_matcher.match_id_to_email(emp_id)
+                if self.id_matcher.match_id_to_email(emp_id)  # type: ignore
             )
             remaining = total_instructors - contacted
 
@@ -324,11 +427,35 @@ Progress: {contacted}/{total_instructors}
                 prefix_icon=ft.Icons.MEETING_ROOM,
             )
 
+            message_input = ft.TextField(
+                label="Message template",
+                value="Hello,\n The CTS supported classroom: {location}",
+                multiline=True,
+                min_lines=4,
+                max_lines=8,
+                width=720,
+                prefix_icon=ft.Icons.MESSAGE,
+            )
+
             def on_search(e):
                 if building_input.value and room_input.value:
                     self._lookup_classroom(page, building_input.value, room_input.value)
                 else:
                     self._show_snack(page, "Please enter building and room")
+
+            def on_send(e):
+                if not (building_input.value and room_input.value):
+                    self._show_snack(page, "Please enter building and room")
+                    return
+                if not message_input.value:
+                    self._show_snack(page, "Please enter a message")
+                    return
+                self._send_message_to_classroom(
+                    page,
+                    building_input.value,
+                    room_input.value,
+                    message_input.value,
+                )
 
             return ft.Container(
                 content=ft.Column(
@@ -338,14 +465,32 @@ Progress: {contacted}/{total_instructors}
                             size=20,
                             weight=ft.FontWeight.W_600,
                         ),
-                        ft.Row([building_input, room_input], spacing=12, wrap=True),
-                        ft.FilledButton(
-                            "Search", icon=ft.Icons.SEARCH, on_click=on_search
+                        ft.Text(
+                            "Optional: write a message and send it to all instructors teaching in that classroom. Use {location} as a placeholder.",
+                            size=12,
                         ),
+                        ft.Row([building_input, room_input], spacing=12, wrap=True),
+                        ft.Row(
+                            [
+                                ft.FilledButton(
+                                    "Search",
+                                    icon=ft.Icons.SEARCH,
+                                    on_click=on_search,
+                                ),
+                                ft.OutlinedButton(
+                                    "Send message",
+                                    icon=ft.Icons.SEND,
+                                    on_click=on_send,
+                                ),
+                            ],
+                            spacing=12,
+                            wrap=True,
+                        ),
+                        message_input,
                     ],
                     spacing=16,
                 ),
-                padding=ft.padding.all(16),
+                padding=ft.Padding.all(16),
             )
 
         def build_view_by_instructor() -> ft.Control:
@@ -377,13 +522,18 @@ Progress: {contacted}/{total_instructors}
                     ],
                     spacing=16,
                 ),
-                padding=ft.padding.all(16),
+                padding=ft.Padding.all(16),
             )
 
         def build_view_deployment() -> ft.Control:
+            already_contacted_text = ft.Text(
+                f"Already contacted: {self._get_already_contacted_count()}", size=12
+            )
+            self._deployment_already_contacted_text = already_contacted_text
+
             message_input = ft.TextField(
                 label="Message template",
-                value="Hello, you teach in: {locations}",
+                value=default_semester_start_message,
                 multiline=True,
                 min_lines=6,
                 max_lines=10,
@@ -392,7 +542,7 @@ Progress: {contacted}/{total_instructors}
             )
             batch_size_input = ft.TextField(
                 label="Batch size",
-                value="10",
+                value="50",
                 width=240,
                 prefix_icon=ft.Icons.NUMBERS,
                 keyboard_type=ft.KeyboardType.NUMBER,
@@ -414,13 +564,14 @@ Progress: {contacted}/{total_instructors}
                     [
                         ft.Text(
                             "Start of semester deployment",
-                            size=20,
+                            size=24,
                             weight=ft.FontWeight.W_600,
                         ),
                         ft.Text(
-                            "Use {locations} as a placeholder for instructor classroom locations.",
-                            size=12,
+                            "'{locations}' is a list of classrooms that an instructor teaches in",
+                            size=8,
                         ),
+                        already_contacted_text,
                         message_input,
                         ft.Row(
                             [
@@ -438,7 +589,7 @@ Progress: {contacted}/{total_instructors}
                     spacing=16,
                     scroll=ft.ScrollMode.AUTO,
                 ),
-                padding=ft.padding.all(16),
+                padding=ft.Padding.all(16),
             )
 
         views = [
