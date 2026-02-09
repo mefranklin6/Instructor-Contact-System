@@ -45,3 +45,13 @@ docker compose down --rmi local --remove-orphans; docker compose up --build --fo
 ```
 
 In a browser: go to `127.0.0.1:8080`
+
+## Maintenance
+
+### Zoom Users file
+
+Zoom Admin -> User Management -> Users -> Export -> All users in the table
+
+### Chico Supported Locations (Chico only)
+
+Go to the supported locations intranet page: Export -> Export to CSV
