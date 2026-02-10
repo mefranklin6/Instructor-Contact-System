@@ -5,7 +5,8 @@ Main entry file
 - Runs Flet
 """
 
-DEV_MODE = False
+# Set to false to enable sending emails
+DEV_MODE = True
 
 import json
 import logging as log
@@ -22,15 +23,14 @@ if SUPPORTED_LOCATIONS == "Chico":
 else:
     slp = None
 
-from src import data_loader
-from src import id_matcher_from_zoom_users as matcher
 from messages_ import (
-    default_semester_start_message,
     default_room_contact_message,
     default_room_contact_subject,
+    default_semester_start_message,
     default_semester_start_subject,
 )
-from src import email_sender
+from src import data_loader, email_sender
+from src import id_matcher_from_zoom_users as matcher
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -38,6 +38,13 @@ log.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 print(f"Logging level set to {LOGGING_LEVEL}")
+
+if DEV_MODE:
+    log.warning(
+        "System is in Dev Mode. Emails will not be sent. Change by setting DEV_MODE on main.py"
+    )
+else:
+    log.info("System is in production mode. Emails will be sent")
 
 
 class InstructorContactSystem:
@@ -192,31 +199,35 @@ class InstructorContactSystem:
             sent_count = 0
             failed = []
             self._load_contacted_instructors()
-            for email in emails:
-                ok = False
-                try:
-                    subject = default_room_contact_subject
-                    ok = bool(self.email_sender.send(email, subject, message))
-                    log.info(f"Sent: {email}, subject: {subject}, message: {message}")
-                except Exception as e:
-                    log.error(f"Email send failed to {email}: {str(e)}")
+            if not DEV_MODE:
+                for email in emails:
+                    ok = False
+                    try:
+                        subject = default_room_contact_subject
+                        ok = bool(self.email_sender.send(email, subject, message))
+                        log.info(
+                            f"Sent: {email}, subject: {subject}, message: {message}"
+                        )
+                    except Exception as e:
+                        log.error(f"Email send failed to {email}: {str(e)}")
 
-                if ok:
-                    existing = self.contacted_instructors.get(email, {})
-                    history = existing.get("classroom_messages", [])
-                    history.append(
-                        {
-                            "sent_at": datetime.now().isoformat(),
-                            "location": location_key,
-                            "message": message,
-                        }
-                    )
-                    existing["classroom_messages"] = history
-                    self.contacted_instructors[email] = existing
-                    sent_count += 1
-                else:
-                    failed.append(email)
-
+                    if ok:
+                        existing = self.contacted_instructors.get(email, {})
+                        history = existing.get("classroom_messages", [])
+                        history.append(
+                            {
+                                "sent_at": datetime.now().isoformat(),
+                                "location": location_key,
+                                "message": message,
+                            }
+                        )
+                        existing["classroom_messages"] = history
+                        self.contacted_instructors[email] = existing
+                        sent_count += 1
+                    else:
+                        failed.append(email)
+            else:  # dev mode
+                log.info(f"DEV MODE: Would have sent messages to {emails}")
             self._save_contacted_instructors()
 
             summary = f"""Classroom Message Sent
@@ -374,33 +385,38 @@ Message template includes instructor locations via {{locations}}.
                 self._show_snack(page, "Email sender is not configured")
                 return
 
-            subject = default_semester_start_message
+            subject = default_semester_start_subject
 
             for instructor in instructors[:batch_size]:
                 if instructor["email"] not in self.contacted_instructors:
                     locations_str = ", ".join(instructor["locations"])
                     message = message_template.format(locations=locations_str)
-                    ok = False
-                    try:
-                        ok = bool(
-                            self.email_sender.send(
-                                instructor["email"], subject, message
+                    if not DEV_MODE:
+                        ok = False
+                        try:
+                            ok = bool(
+                                self.email_sender.send(
+                                    instructor["email"], subject, message
+                                )
                             )
-                        )
-                    except Exception as e:
-                        log.error(
-                            f"Email send failed to {instructor['email']}: {str(e)}"
-                        )
+                        except Exception as e:
+                            log.error(
+                                f"Email send failed to {instructor['email']}: {str(e)}"
+                            )
 
-                    if ok:
-                        self.contacted_instructors[instructor["email"]] = {
-                            "contacted_at": datetime.now().isoformat(),
-                            "locations": instructor["locations"],
-                            "message": message,
-                        }
-                        batch_count += 1
-                    else:
-                        failed.append(instructor["email"])
+                        if ok:
+                            self.contacted_instructors[instructor["email"]] = {
+                                "contacted_at": datetime.now().isoformat(),
+                                "locations": instructor["locations"],
+                                "message": message,
+                            }
+                            batch_count += 1
+                        else:
+                            failed.append(instructor["email"])
+                    else:  # dev mode
+                        log.info(
+                            f"DEV MODE: Would have sent email to {instructor["email"]}"
+                        )
 
             self._save_contacted_instructors()
 
