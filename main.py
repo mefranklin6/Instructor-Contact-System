@@ -137,29 +137,44 @@ class InstructorContactSystem:
 
     # ---------- App logic ----------
 
-    def _load_contacted_instructors(self):
-        contact_file = "contacted_instructors.json"
+    def _load_contact_history(self):
+        contact_file = "contact_history.json"
         if os.path.exists(contact_file):
             with open(contact_file, "r") as f:
                 self.contacted_instructors = json.load(f)
         else:
             self.contacted_instructors = {}
 
+    def _was_contacted_for_semester_start(self, email: str) -> bool:
+        """Check if an instructor was contacted for 'start of semester' deployment."""
+        if email not in self.contacted_instructors:
+            return False
+        contact_info = self.contacted_instructors[email]
+        # Check if they have the top-level contact_type field set to "start of semester"
+        return contact_info.get("contact_type") == "start of semester"
+
     def _get_already_contacted_count(self) -> int:
-        contact_file = "contacted_instructors.json"
+        """Count instructors contacted for 'start of semester' deployment only."""
+        contact_file = "contact_history.json"
         if not os.path.exists(contact_file):
             return 0
         try:
             with open(contact_file, "r") as f:
                 data = json.load(f)
             if isinstance(data, dict):
-                return len(data)
+                # Only count those with contact_type "start of semester"
+                count = sum(
+                    1
+                    for email, info in data.items()
+                    if info.get("contact_type") == "start of semester"
+                )
+                return count
             return 0
         except Exception:
             return 0
 
-    def _save_contacted_instructors(self):
-        contact_file = "contacted_instructors.json"
+    def _save_contact_history(self):
+        contact_file = "contact_history.json"
         with open(contact_file, "w") as f:
             json.dump(self.contacted_instructors, f, indent=2)
 
@@ -198,7 +213,7 @@ class InstructorContactSystem:
 
             sent_count = 0
             failed = []
-            self._load_contacted_instructors()
+            self._load_contact_history()
             if not DEV_MODE:
                 for email in emails:
                     ok = False
@@ -217,7 +232,8 @@ class InstructorContactSystem:
                         history.append(
                             {
                                 "sent_at": datetime.now().isoformat(),
-                                "location": location_key,
+                                "locations": location_key,
+                                "contact_type": "all instructors for classroom",
                                 "message": message,
                             }
                         )
@@ -228,7 +244,7 @@ class InstructorContactSystem:
                         failed.append(email)
             else:  # dev mode
                 log.info(f"DEV MODE: Would have sent messages to {emails}")
-            self._save_contacted_instructors()
+            self._save_contact_history()
 
             summary = f"""Classroom Message Sent
 
@@ -321,7 +337,7 @@ Failed: {len(failed)}
         self, page: ft.Page, message_template: str, batch_size: int
     ):
         try:
-            self._load_contacted_instructors()
+            self._load_contact_history()
 
             all_instructors = []
             for emp_id in self.contact_by_instructor:
@@ -391,8 +407,8 @@ Message template includes instructor locations via {{locations}}.
                 if instructor["email"] not in self.contacted_instructors:
                     locations_str = ", ".join(instructor["locations"])
                     message = message_template.format(locations=locations_str)
+                    ok = False
                     if not DEV_MODE:
-                        ok = False
                         try:
                             ok = bool(
                                 self.email_sender.send(
@@ -403,22 +419,23 @@ Message template includes instructor locations via {{locations}}.
                             log.error(
                                 f"Email send failed to {instructor['email']}: {str(e)}"
                             )
-
-                        if ok:
-                            self.contacted_instructors[instructor["email"]] = {
-                                "contacted_at": datetime.now().isoformat(),
-                                "locations": instructor["locations"],
-                                "message": message,
-                            }
-                            batch_count += 1
                         else:
                             failed.append(instructor["email"])
                     else:  # dev mode
+                        ok = True
                         log.info(
                             f"DEV MODE: Would have sent email to {instructor["email"]}"
                         )
+                    if ok:
+                        self.contacted_instructors[instructor["email"]] = {
+                            "contacted_at": datetime.now().isoformat(),
+                            "locations": instructor["locations"],
+                            "contact_type": "start of semester",
+                            "message": message,
+                        }
+                        batch_count += 1
 
-            self._save_contacted_instructors()
+            self._save_contact_history()
 
             if self._deployment_already_contacted_text is not None:
                 self._deployment_already_contacted_text.value = (
@@ -753,7 +770,7 @@ Progress: {contacted}/{total_instructors}
                 ft.NavigationRailDestination(
                     icon=ft.Icons.ROCKET_LAUNCH_OUTLINED,
                     selected_icon=ft.Icons.ROCKET_LAUNCH,
-                    label="Deployment",
+                    label="Start of Semester",
                 ),
             ],
         )
