@@ -73,6 +73,25 @@ class DataLoader:
             filtered_df = filtered_df[filtered_df["ROOM"] != "ONLINE"]
             filtered_df = filtered_df[filtered_df["BUILDING"] != "ONLINE"]
             filtered_df = filtered_df[filtered_df["DAYS1"] != "TBA"]
+
+            # Normalize instructor IDs to match Zoom export normalization:
+            #  - strip, numeric-only, then zero-pad to 9 digits.
+            filtered_df["INSTRUCTOR1_EMPLID"] = (
+                filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
+            )
+            filtered_df = filtered_df[
+                filtered_df["INSTRUCTOR1_EMPLID"]
+                .str.replace(".", "", regex=False)
+                .str.isdigit()
+            ]
+            filtered_df["INSTRUCTOR1_EMPLID"] = (
+                filtered_df["INSTRUCTOR1_EMPLID"]
+                .astype(float)
+                .astype(int)
+                .astype(str)
+                .str.zfill(9)
+            )
+
             log.debug(
                 f"{initial_rows - len(filtered_df)} rows initially cleansed. Initial size: {initial_rows}, Filtered size: {len(filtered_df)}"
             )

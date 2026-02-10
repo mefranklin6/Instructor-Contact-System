@@ -58,17 +58,28 @@ class Matcher:
         log.info(f"Loaded {len(mapping)} ID to email mappings")
         return mapping
 
-    def match_id_to_email(self, emp_id: str) -> str:
-        """Match a single Employee ID to an email.
-
-        Args:
-            emp_id: Employee ID to match
-
-        Returns:
-            Corresponding email if found, else None
-        """
-        try:
-            return self.id_to_email_map[emp_id]
-        except Exception as e:
-            log.warning(f"Could not match id {emp_id} to an email")
+    def _normalize_emp_id(self, emp_id) -> str:
+        if emp_id is None:
             return ""
+        s = str(emp_id).strip()
+        if not s:
+            return ""
+        # Handle common "123.0" shape from CSV/Excel casts
+        if s.replace(".", "", 1).isdigit():
+            try:
+                s = str(int(float(s)))
+            except Exception:
+                pass
+        if not s.isdigit():
+            return ""
+        return s.zfill(9)
+
+    def match_id_to_email(self, emp_id: str) -> str:
+        """Match a single Employee ID to an email."""
+        normalized = self._normalize_emp_id(emp_id)
+        if not normalized:
+            return ""
+        email = self.id_to_email_map.get(normalized, "")
+        if not email:
+            log.warning("Could not match id %s to an email", normalized)
+        return email
