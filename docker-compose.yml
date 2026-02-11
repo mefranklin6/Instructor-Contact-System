@@ -10,3 +10,8 @@ services:
       - SMTP_PASSWORD
       - CALENDAR_CSV
       - LOG_LEVEL
+    volumes:
+      - contact-data:/data
+
+volumes:
+  contact-data:
