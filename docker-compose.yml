@@ -6,10 +6,16 @@ services:
     environment:
       - SMTP_HOST
       - SMTP_PORT
+      - SMTP_FROM
       - SMTP_USERNAME
       - SMTP_PASSWORD
-      - CALENDAR_CSV
-      - LOG_LEVEL
+      - LOGGING_LEVEL
+      - DEV_MODE
+      - SUPPORTED_LOCATIONS_MODE
+      - UPPORTED_LOCATIONS_FILE_PATH
+      - FL_FILE_PATH
+      - ZOOM_FILE_PATH
+
     volumes:
       - contact-data:/data
 
