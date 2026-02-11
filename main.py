@@ -207,6 +207,120 @@ class InstructorContactSystem:
         with open(contact_file, "w") as f:
             json.dump(self.contacted_instructors, f, indent=2)
 
+    def _get_contact_history_dict(self) -> dict:
+        """Return the contact history dictionary."""
+        self._load_contact_history()
+        return self.contacted_instructors
+
+    def _get_server_diagnostics(self) -> str:
+        """Gather server diagnostic information."""
+        try:
+            import platform
+            import sys
+
+            diagnostics = f"""Server Diagnostics Report
+Generated: {datetime.now().isoformat()}
+
+System Information:
+- Platform: {platform.system()} {platform.release()}
+- Python Version: {sys.version}
+- Running in Docker: {self.is_in_docker}
+
+Application Status:
+- DEV_MODE: {DEV_MODE}
+- Logging Level: {LOGGING_LEVEL}
+- Supported Locations Mode: {SUPPORTED_LOCATIONS}
+
+Data Status:
+- Total Instructors: {len(self.contact_by_instructor)}
+- Total Locations: {len(self.contact_by_location)}
+- Contacted Instructors: {self._get_already_contacted_count()}
+- Email Sender Configured: {self.email_sender is not None}
+- ID Matcher Configured: {self.id_matcher is not None}
+
+File Paths:
+- Contact History: {self._get_contact_file_path()}
+- FL File Path: {os.getenv("FL_FILE_PATH", "Not configured")}
+- Zoom File Path: {os.getenv("ZOOM_FILE_PATH", "Not configured")}
+- Supported Locations File: {os.getenv("SUPPORTED_LOCATIONS_FILE_PATH", "Not configured")}
+
+This is an automated test email from the Instructor Contact System.
+"""
+            return diagnostics
+        except Exception as e:
+            log.error(f"Error gathering diagnostics: {str(e)}")
+            return f"Error gathering diagnostics: {str(e)}"
+
+    def _send_test_email(self, page: ft.Page, email: str):
+        """Send a test email with diagnostic information."""
+        try:
+            if not email or "@" not in email:
+                self._show_snack(page, "Please enter a valid email address")
+                return
+
+            if not self.email_sender:
+                self._show_snack(page, "Email sender is not configured")
+                return
+
+            subject = "Instructor Contact System - Test Email"
+            message = self._get_server_diagnostics()
+
+            if not DEV_MODE:
+                success = self.email_sender.send(email, subject, message)
+                if success:
+                    self._show_snack(page, f"Test email sent successfully to {email}")
+                    log.info(f"Test email sent to {email}")
+                else:
+                    self._show_snack(page, "Failed to send test email")
+                    log.error(f"Failed to send test email to {email}")
+            else:
+                log.info(f"DEV MODE: Would have sent test email to {email}")
+                log.info(f"Subject: {subject}")
+                log.info(f"Message:\n{message}")
+                self._show_snack(
+                    page, f"DEV MODE: Test email logged (not sent) for {email}"
+                )
+
+        except Exception as e:
+            log.error(f"Error sending test email: {str(e)}")
+            self._show_snack(page, f"Error: {str(e)}")
+
+    def _download_contact_history(self, page: ft.Page, file_picker: ft.FilePicker):
+        """Allow user to download the contact history JSON file."""
+        try:
+            contact_file = self._get_contact_file_path()
+            if not os.path.exists(contact_file):
+                self._show_snack(page, "No contact history found")
+                return
+
+            # Trigger the file picker to save
+            _ = file_picker.save_file(
+                file_name="contact_history.json",
+                allowed_extensions=["json"],
+            )
+
+        except Exception as e:
+            log.error(f"Error downloading contact history: {str(e)}")
+            self._show_snack(page, f"Error: {str(e)}")
+
+    def _on_save_file_result(self, page: ft.Page, e):
+        """Handle the file picker result for saving contact history."""
+        try:
+            if e.path:
+                contact_file = self._get_contact_file_path()
+                if os.path.exists(contact_file):
+                    with open(contact_file, "r") as source:
+                        data = source.read()
+                    with open(e.path, "w") as dest:
+                        dest.write(data)
+                    self._show_snack(page, f"Contact history saved to {e.path}")
+                    log.info(f"Contact history downloaded to {e.path}")
+                else:
+                    self._show_snack(page, "No contact history file found")
+        except Exception as ex:
+            log.error(f"Error saving contact history: {str(ex)}")
+            self._show_snack(page, f"Error saving file: {str(ex)}")
+
     def _send_message_to_classroom(
         self, page: ft.Page, building: str, room: str, message_template: str
     ):
@@ -769,10 +883,85 @@ Progress: {contacted}/{total_instructors}
                 padding=ft.Padding.all(16),
             )
 
+        def build_view_utility() -> ft.Control:
+
+            async def on_download_history(e: ft.Event[ft.Button]):
+                # Build the bytes you want to download
+                data = self._get_contact_history_dict()  # <- whatever you have
+                content_bytes = json.dumps(data, indent=2).encode("utf-8")
+
+                # Desktop: save_file() returns a path; YOU write the file (Flet doesn't create it)
+                # Web/iOS/Android: you MUST pass src_bytes (Flet will download/save it)
+                if page.web or page.platform in (
+                    ft.PagePlatform.IOS,
+                    ft.PagePlatform.ANDROID,
+                ):
+                    await ft.FilePicker().save_file(
+                        file_name="contact_history.json",
+                        src_bytes=content_bytes,
+                    )
+                    return
+
+                save_path = await ft.FilePicker().save_file(
+                    file_name="contact_history.json"
+                )
+                if save_path:
+                    with open(save_path, "wb") as f:
+                        f.write(content_bytes)
+
+            # Test email UI elements
+            test_email_input = ft.TextField(
+                label="Test Email Address",
+                width=560,
+                prefix_icon=ft.Icons.EMAIL,
+                keyboard_type=ft.KeyboardType.EMAIL,
+                hint_text="Enter email to receive test message",
+            )
+
+            def on_send_test_email(e):
+                if test_email_input.value:
+                    self._send_test_email(page, test_email_input.value.strip())
+                else:
+                    self._show_snack(page, "Please enter an email address")
+
+            return ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("Utility", size=24, weight=ft.FontWeight.W_600),
+                        ft.Divider(),
+                        ft.Text("Contact History", size=18, weight=ft.FontWeight.W_500),
+                        ft.Text(
+                            "Download the contact history JSON file to view all contacted instructors.",
+                            size=12,
+                        ),
+                        ft.FilledButton(
+                            content="Download Contact History",
+                            icon=ft.Icons.DOWNLOAD,
+                            on_click=on_download_history,
+                        ),
+                        ft.Divider(),
+                        ft.Text("Test Email", size=18, weight=ft.FontWeight.W_500),
+                        ft.Text(
+                            "Send a test email with server diagnostic information.",
+                            size=12,
+                        ),
+                        test_email_input,
+                        ft.FilledButton(
+                            "Send Test Email",
+                            icon=ft.Icons.SEND,
+                            on_click=on_send_test_email,
+                        ),
+                    ],
+                    spacing=16,
+                ),
+                padding=16,
+            )
+
         views = [
             build_view_by_classroom,
             build_view_by_instructor,
             build_view_deployment,
+            build_view_utility,
         ]
 
         # ---- Navigation + content swapping ----
@@ -801,6 +990,11 @@ Progress: {contacted}/{total_instructors}
                     selected_icon=ft.Icons.ROCKET_LAUNCH,
                     label="Start of Semester",
                 ),
+                ft.NavigationRailDestination(
+                    icon=ft.Icons.BUILD_OUTLINED,
+                    selected_icon=ft.Icons.BUILD,
+                    label="Utility",
+                ),
             ],
         )
 
@@ -816,6 +1010,7 @@ Progress: {contacted}/{total_instructors}
                 ft.NavigationBarDestination(
                     icon=ft.Icons.ROCKET_LAUNCH, label="Deploy"
                 ),
+                ft.NavigationBarDestination(icon=ft.Icons.BUILD, label="Utility"),
             ],
         )
 
