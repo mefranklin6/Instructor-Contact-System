@@ -16,6 +16,13 @@ from messages_ import (
 from src import data_loader, email_sender
 from src import id_matcher_from_zoom_users as matcher
 
+LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
+log.basicConfig(
+    level=getattr(log, LOGGING_LEVEL, log.DEBUG),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+log.info(f"Logging level set to {LOGGING_LEVEL}")
+
 SUPPORTED_LOCATIONS = os.getenv("SUPPORTED_LOCATIONS", "none")
 if SUPPORTED_LOCATIONS == "Chico":
     from src import chico_supported_location_parser as slp
@@ -26,23 +33,16 @@ log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS}")
 # If True, disables the actual sending of emails.
 DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
 
-LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
-log.basicConfig(
-    level=getattr(log, LOGGING_LEVEL, log.DEBUG),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
-print(f"Logging level set to {LOGGING_LEVEL}")
-
 if DEV_MODE:
     log.warning(
-        "System is in Dev Mode. Emails will not be sent. Change by setting DEV_MODE on main.py"
+        "System is in Dev Mode. Emails will not be sent. Change by setting DEV_MODE in .env"
     )
 else:
     log.info("System is in production mode. Emails will be sent")
 
 
 class InstructorContactSystem:
-    def __init__(self):
+    def __init__(self) -> None:
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
@@ -67,7 +67,7 @@ class InstructorContactSystem:
 
         self._initialize_data()
 
-    def _initialize_data(self):
+    def _initialize_data(self) -> None:
         """Initialize data loaders and aggregators."""
         try:
             if slp and SUPPORTED_LOCATIONS == "Chico":
@@ -161,11 +161,6 @@ class InstructorContactSystem:
         return False
 
     def _get_contact_file_path(self) -> str:
-        """Get the path to the contact history file.
-
-        Returns /data/contact_history.json when in Docker (for persistent volume),
-        or ./contact_history.json when running locally.
-        """
         if self.is_in_docker:
             return "/data/contact_history.json"
         return "contact_history.json"
@@ -882,6 +877,5 @@ Progress: {contacted}/{total_instructors}
 
 
 if __name__ == "__main__":
-    print("Started...")
     app = InstructorContactSystem()
     ft.run(app.main, port=8080, view=ft.AppView.WEB_BROWSER)
