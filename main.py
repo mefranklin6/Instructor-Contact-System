@@ -26,12 +26,12 @@ log.info(f"Logging level set to {LOGGING_LEVEL}")
 # Maximum number of failed recipients to display in error messages
 MAX_FAILED_DISPLAY = 50
 
-SUPPORTED_LOCATIONS = os.getenv("SUPPORTED_LOCATIONS", "none")
-if SUPPORTED_LOCATIONS == "Chico":
+SUPPORTED_LOCATIONS_MODE = os.getenv("SUPPORTED_LOCATIONS", "none")
+if SUPPORTED_LOCATIONS_MODE == "Chico":
     from src import chico_supported_location_parser as slp
 else:
     slp = None
-log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS}")
+log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS_MODE}")
 
 # If True, disables the actual sending of emails.
 DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
@@ -49,7 +49,7 @@ class InstructorContactSystem:
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
-        # self.id_matcher = None
+        # self.id_matcher = None # appease
         self.email_sender = None
         self.contact_by_instructor = {}
         self.contact_by_location = {}
@@ -73,7 +73,7 @@ class InstructorContactSystem:
     def _initialize_data(self) -> None:
         """Initialize data loaders and aggregators."""
         try:
-            if slp and SUPPORTED_LOCATIONS == "Chico":
+            if slp and SUPPORTED_LOCATIONS_MODE == "Chico":
                 slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
                 if not slp_csv:
                     raise FileNotFoundError(
@@ -218,6 +218,21 @@ class InstructorContactSystem:
             import platform
             import sys
 
+            # Get file modification times
+            def get_file_mod_time(file_path):
+                if file_path and os.path.exists(file_path):
+                    mod_time = os.path.getmtime(file_path)
+                    return datetime.fromtimestamp(mod_time).isoformat()
+                return "File not found"
+
+            fl_file = os.getenv("FL_FILE_PATH")
+            zoom_file = os.getenv("ZOOM_FILE_PATH")
+            slp_file = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
+
+            fl_mod_time = get_file_mod_time(fl_file) if fl_file else "Not configured"
+            zoom_mod_time = get_file_mod_time(zoom_file) if zoom_file else "Not configured"
+            slp_mod_time = get_file_mod_time(slp_file) if slp_file else "Not configured"
+
             diagnostics = f"""Server Diagnostics Report
 Generated: {datetime.now().isoformat()}
 
@@ -229,7 +244,7 @@ System Information:
 Application Status:
 - DEV_MODE: {DEV_MODE}
 - Logging Level: {LOGGING_LEVEL}
-- Supported Locations Mode: {SUPPORTED_LOCATIONS}
+- Supported Locations Mode: {SUPPORTED_LOCATIONS_MODE}
 
 Data Status:
 - Total Instructors: {len(self.contact_by_instructor)}
@@ -240,9 +255,14 @@ Data Status:
 
 File Paths:
 - Contact History: {self._get_contact_file_path()}
-- FL File Path: {os.getenv("FL_FILE_PATH", "Not configured")}
-- Zoom File Path: {os.getenv("ZOOM_FILE_PATH", "Not configured")}
-- Supported Locations File: {os.getenv("SUPPORTED_LOCATIONS_FILE_PATH", "Not configured")}
+- FL File Path: {fl_file or "Not configured"}
+- Zoom File Path: {zoom_file or "Not configured"}
+- Supported Locations File: {slp_file or "Not configured"}
+
+File Modification Dates:
+- FL File: {fl_mod_time}
+- Zoom File: {zoom_mod_time}
+- Supported Locations File: {slp_mod_time}
 
 This is an automated test email from the Instructor Contact System.
 """
