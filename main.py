@@ -1,13 +1,3 @@
-"""
-Main entry file
-
-- Imports and instantiates individual modules
-- Runs Flet
-"""
-
-# Set to false to enable sending emails
-DEV_MODE = True
-
 import json
 import logging as log
 import os
@@ -17,12 +7,6 @@ import flet as ft
 
 from src import aggregator as agg
 
-SUPPORTED_LOCATIONS = os.getenv("SUPPORTED_LOCATIONS", "Chico")
-if SUPPORTED_LOCATIONS == "Chico":
-    from src import chico_supported_location_parser as slp
-else:
-    slp = None
-
 from messages_ import (
     default_room_contact_message,
     default_room_contact_subject,
@@ -31,6 +15,16 @@ from messages_ import (
 )
 from src import data_loader, email_sender
 from src import id_matcher_from_zoom_users as matcher
+
+SUPPORTED_LOCATIONS = os.getenv("SUPPORTED_LOCATIONS", "none")
+if SUPPORTED_LOCATIONS == "Chico":
+    from src import chico_supported_location_parser as slp
+else:
+    slp = None
+log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS}")
+
+# If True, disables the actual sending of emails.
+DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -49,7 +43,6 @@ else:
 
 class InstructorContactSystem:
     def __init__(self):
-        self.supported_locations_filter = False
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
@@ -61,18 +54,36 @@ class InstructorContactSystem:
         self._clipboard = None
         self._deployment_already_contacted_text = None
 
+        self.is_in_docker: bool = self.in_docker()
+        if self.is_in_docker:
+            log.info("Running in Docker")
+            # Ensure data directory exists for persistent storage
+            data_dir = "/data"
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir)
+                log.info(f"Created data directory: {data_dir}")
+        else:
+            log.info("Not running in Docker")
+
         self._initialize_data()
 
     def _initialize_data(self):
         """Initialize data loaders and aggregators."""
         try:
-            if os.getenv("SUPPORTED_LOCATIONS_FILE_PATH"):
-                self.supported_locations_filter = True
-                if slp:
-                    parser = slp.SupportedLocationsParser("Supported Locations.csv")
-                    self.supported_locations = parser.run()
+            if slp and SUPPORTED_LOCATIONS == "Chico":
+                slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
+                if not slp_csv:
+                    raise FileNotFoundError(
+                        "No SUPPORTED_LOCATIONS_FILE_PATH Found. This is a required file for Chico mode"
+                    )
+                parser = slp.SupportedLocationsParser(slp_csv)
+                self.supported_locations = parser.run()
 
-            fl_file = os.getenv("FL_FILE_PATH", "FacilitiesLinkClassScheduleDaily.csv")
+            fl_file = os.getenv("FL_FILE_PATH")
+            if not fl_file:
+                raise FileNotFoundError(
+                    "No FL_FILE_PATH found. This is a required file."
+                )
             self.loader = data_loader.DataLoader(
                 fl_file_path=fl_file,
                 supported_locations=self.supported_locations,
@@ -85,17 +96,21 @@ class InstructorContactSystem:
             self.contact_by_instructor = self.aggregator.by_instructor()
             self.contact_by_location = self.aggregator.by_location()
 
-            zoom_file = os.getenv("ZOOM_FILE_PATH", "zoomus_users.csv")
+            zoom_file = os.getenv("ZOOM_FILE_PATH")
+            if not zoom_file:
+                raise FileNotFoundError(
+                    "No ZOOM_FILE_PATH found. This is a required file."
+                )
             self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
             if not self.id_matcher:
-                log.critical("ID matcher not loaded")
-                exit(1)
+                raise ValueError("ID Matcher failed to initialize")
 
             self.email_sender = email_sender.EmailSender()
 
             log.info("Data initialization successful")
         except Exception as e:
             log.error(f"Error initializing data: {str(e)}")
+            exit(1)
 
     # ---------- Flet 0.80.x helpers ----------
 
@@ -135,10 +150,30 @@ class InstructorContactSystem:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
+    def in_docker(self) -> bool:
+        try:
+            if os.path.exists("/.dockerenv"):
+                return True
+            with open("/proc/1/cgroup", "rt") as f:
+                return "docker" in f.read()
+        except Exception:
+            return False
+        return False
+
+    def _get_contact_file_path(self) -> str:
+        """Get the path to the contact history file.
+
+        Returns /data/contact_history.json when in Docker (for persistent volume),
+        or ./contact_history.json when running locally.
+        """
+        if self.is_in_docker:
+            return "/data/contact_history.json"
+        return "contact_history.json"
+
     # ---------- App logic ----------
 
     def _load_contact_history(self):
-        contact_file = "contact_history.json"
+        contact_file = self._get_contact_file_path()
         if os.path.exists(contact_file):
             with open(contact_file, "r") as f:
                 self.contacted_instructors = json.load(f)
@@ -155,7 +190,7 @@ class InstructorContactSystem:
 
     def _get_already_contacted_count(self) -> int:
         """Count instructors contacted for 'start of semester' deployment only."""
-        contact_file = "contact_history.json"
+        contact_file = self._get_contact_file_path()
         if not os.path.exists(contact_file):
             return 0
         try:
@@ -174,7 +209,7 @@ class InstructorContactSystem:
             return 0
 
     def _save_contact_history(self):
-        contact_file = "contact_history.json"
+        contact_file = self._get_contact_file_path()
         with open(contact_file, "w") as f:
             json.dump(self.contacted_instructors, f, indent=2)
 
@@ -424,7 +459,7 @@ Message template includes instructor locations via {{locations}}.
                     else:  # dev mode
                         ok = True
                         log.info(
-                            f"DEV MODE: Would have sent email to {instructor["email"]}"
+                            f"DEV MODE: Would have sent email to {instructor['email']}"
                         )
                     if ok:
                         self.contacted_instructors[instructor["email"]] = {
