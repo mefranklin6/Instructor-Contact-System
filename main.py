@@ -23,6 +23,9 @@ log.basicConfig(
 )
 log.info(f"Logging level set to {LOGGING_LEVEL}")
 
+# Maximum number of failed recipients to display in error messages
+MAX_FAILED_DISPLAY = 50
+
 SUPPORTED_LOCATIONS = os.getenv("SUPPORTED_LOCATIONS", "none")
 if SUPPORTED_LOCATIONS == "Chico":
     from src import chico_supported_location_parser as slp
@@ -46,7 +49,7 @@ class InstructorContactSystem:
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
-        self.id_matcher = None
+        # self.id_matcher = None
         self.email_sender = None
         self.contact_by_instructor = {}
         self.contact_by_location = {}
@@ -110,7 +113,7 @@ class InstructorContactSystem:
             log.info("Data initialization successful")
         except Exception as e:
             log.error(f"Error initializing data: {str(e)}")
-            exit(1)
+            raise
 
     # ---------- Flet 0.80.x helpers ----------
 
@@ -158,12 +161,16 @@ class InstructorContactSystem:
                 return "docker" in f.read()
         except Exception:
             return False
-        return False
 
     def _get_contact_file_path(self) -> str:
         if self.is_in_docker:
             return "/data/contact_history.json"
         return "contact_history.json"
+
+    def _dedupe_emails(self, emails: list[str]) -> list[str]:
+        """Remove duplicate emails while preserving order."""
+        seen = set()
+        return [e for e in emails if not (e in seen or seen.add(e))]
 
     # ---------- App logic ----------
 
@@ -174,14 +181,6 @@ class InstructorContactSystem:
                 self.contacted_instructors = json.load(f)
         else:
             self.contacted_instructors = {}
-
-    def _was_contacted_for_semester_start(self, email: str) -> bool:
-        """Check if an instructor was contacted for 'start of semester' deployment."""
-        if email not in self.contacted_instructors:
-            return False
-        contact_info = self.contacted_instructors[email]
-        # Check if they have the top-level contact_type field set to "start of semester"
-        return contact_info.get("contact_type") == "start of semester"
 
     def _get_already_contacted_count(self) -> int:
         """Count instructors contacted for 'start of semester' deployment only."""
@@ -221,13 +220,12 @@ class InstructorContactSystem:
             emp_ids = self.contact_by_location[location_key]
             emails = []
             for emp_id in emp_ids:
-                email = self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                email = self.id_matcher.match_id_to_email(emp_id)
                 if email:
                     emails.append(email)
 
             # de-dupe but keep stable order
-            seen = set()
-            emails = [e for e in emails if not (e in seen or seen.add(e))]
+            emails = self._dedupe_emails(emails)
 
             if not emails:
                 self._show_snack(
@@ -284,9 +282,11 @@ Failed: {len(failed)}
 """
 
             if failed:
-                summary += "\nFailed recipients:\n" + "\n".join(failed[:50])
-                if len(failed) > 50:
-                    summary += f"\n...and {len(failed) - 50} more"
+                summary += "\nFailed recipients:\n" + "\n".join(
+                    failed[:MAX_FAILED_DISPLAY]
+                )
+                if len(failed) > MAX_FAILED_DISPLAY:
+                    summary += f"\n...and {len(failed) - MAX_FAILED_DISPLAY} more"
 
             dialog = ft.AlertDialog(
                 title=ft.Text("Send complete"),
@@ -315,9 +315,9 @@ Failed: {len(failed)}
 
             emp_ids = self.contact_by_location[location_key]
             emails = [
-                self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                self.id_matcher.match_id_to_email(emp_id)
                 for emp_id in emp_ids
-                if self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                if self.id_matcher.match_id_to_email(emp_id)
             ]
 
             if not emails:
@@ -342,7 +342,7 @@ Failed: {len(failed)}
         try:
             emp_id = None
             for eid in self.contact_by_instructor:
-                if self.id_matcher.match_id_to_email(eid) == email:  # type: ignore
+                if self.id_matcher.match_id_to_email(eid) == email:
                     emp_id = eid
                     break
 
@@ -371,7 +371,7 @@ Failed: {len(failed)}
 
             all_instructors = []
             for emp_id in self.contact_by_instructor:
-                email = self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                email = self.id_matcher.match_id_to_email(emp_id)
                 if email and email not in self.contacted_instructors:
                     all_instructors.append(
                         {
@@ -449,8 +449,8 @@ Message template includes instructor locations via {{locations}}.
                             log.error(
                                 f"Email send failed to {instructor['email']}: {str(e)}"
                             )
-                        else:
                             failed.append(instructor["email"])
+
                     else:  # dev mode
                         ok = True
                         log.info(
@@ -477,7 +477,7 @@ Message template includes instructor locations via {{locations}}.
             total_instructors = sum(
                 1
                 for emp_id in self.contact_by_instructor
-                if self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                if self.id_matcher.match_id_to_email(emp_id)
             )
             remaining = total_instructors - contacted
 
@@ -492,9 +492,11 @@ Progress: {contacted}/{total_instructors}
 """
 
             if failed:
-                summary += "\nFailed recipients:\n" + "\n".join(failed[:50])
-                if len(failed) > 50:
-                    summary += f"\n...and {len(failed) - 50} more"
+                summary += "\nFailed recipients:\n" + "\n".join(
+                    failed[:MAX_FAILED_DISPLAY]
+                )
+                if len(failed) > MAX_FAILED_DISPLAY:
+                    summary += f"\n...and {len(failed) - MAX_FAILED_DISPLAY} more"
 
             dialog = ft.AlertDialog(
                 title=ft.Text("Deployment Complete"),
@@ -573,14 +575,11 @@ Progress: {contacted}/{total_instructors}
                 emp_ids = self.contact_by_location[location_key]
                 emails = []
                 for emp_id in emp_ids:
-                    email = self.id_matcher.match_id_to_email(emp_id)  # type: ignore
+                    email = self.id_matcher.match_id_to_email(emp_id)
                     if email:
                         emails.append(email)
 
-                seen = set()
-                emails = [
-                    email for email in emails if not (email in seen or seen.add(email))
-                ]
+                emails = self._dedupe_emails(emails)
 
                 if not emails:
                     self._show_snack(
