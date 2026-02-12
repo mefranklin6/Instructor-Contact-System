@@ -371,6 +371,7 @@ This is an automated test email from the Instructor Contact System.
         page: ft.Page,
         building: str,
         room: str,
+        subject: str,
         message_template: str,
         location_map: Optional[dict] = None,
     ):
@@ -414,7 +415,6 @@ This is an automated test email from the Instructor Contact System.
                 for email in emails:
                     ok = False
                     try:
-                        subject = default_room_contact_subject
                         ok = bool(self.email_sender.send(email, subject, message))
                         log.info(
                             f"Sent: {email}, subject: {subject}, message: {message}"
@@ -778,6 +778,13 @@ Progress: {contacted}/{total_instructors}
             def handle_date_range_change(e):
                 sync_date_range_from_picker()
 
+            subject_input = ft.TextField(
+                label="Subject",
+                value=default_room_contact_subject,
+                width=720,
+                prefix_icon=ft.Icons.SUBJECT,
+            )
+
             message_input = ft.TextField(
                 label="Message template",
                 value=default_room_contact_message,
@@ -867,6 +874,9 @@ Progress: {contacted}/{total_instructors}
                 if not (building_input.value and room_input.value):
                     self._show_snack(page, "Please enter building and room")
                     return
+                if not subject_input.value:
+                    self._show_snack(page, "Please enter a subject")
+                    return
                 if not message_input.value:
                     self._show_snack(page, "Please enter a message")
                     return
@@ -907,6 +917,7 @@ Progress: {contacted}/{total_instructors}
                 recipients_text = "\n".join(emails)
                 confirm_body = (
                     f"Are you sure you want to send this message to these recipients?\n\n"
+                    f"Subject:\n{subject_input.value}\n\n"
                     f"Message:\n{rendered_message}\n\n"
                     f"Recipients ({len(emails)}):\n{recipients_text}"
                 )
@@ -938,6 +949,7 @@ Progress: {contacted}/{total_instructors}
                                     page,
                                     building_input.value,
                                     room_input.value,
+                                    subject_input.value,
                                     message_input.value,
                                     location_map,
                                 ),
@@ -996,8 +1008,12 @@ Progress: {contacted}/{total_instructors}
                             wrap=True,
                         ),
                         ft.Container(
-                            content=message_input,
+                            content=subject_input,
                             padding=ft.Padding(top=24, left=0, right=0, bottom=0),
+                        ),
+                        ft.Container(
+                            content=message_input,
+                            padding=ft.Padding(top=12, left=0, right=0, bottom=0),
                         ),
                     ],
                     spacing=16,
