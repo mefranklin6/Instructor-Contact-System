@@ -5,6 +5,7 @@ from datetime import date, datetime, time
 from typing import Optional, cast
 
 import flet as ft
+import pandas as pd
 
 from src import aggregator as agg
 
@@ -14,7 +15,7 @@ from messages_ import (
     default_semester_start_message,
     default_semester_start_subject,
 )
-from src import data_loader, email_sender
+from src import email_sender
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -33,12 +34,19 @@ else:
     slp = None
 log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS_MODE}")
 
-ID_TO_EMAIL_MODULE=os.getenv("ID_TO_EMAIL_MODULE", "none").lower()
-if ID_TO_EMAIL_MODULE == "zoom":
+ID_TO_EMAIL_MODULE = os.getenv("ID_TO_EMAIL_MODULE", "none").lower()
+if ID_TO_EMAIL_MODULE == "zoom_csv":
     from src import id_matcher_from_zoom_users as matcher
 else:
     matcher = None
 log.info(f"Using ID to email module: {ID_TO_EMAIL_MODULE}")
+
+SCHEDULE_MODULE = os.getenv("SCHEDULE_MODULE", "none").lower()
+if SCHEDULE_MODULE == "fl_csv":
+    from src import fl_data_loader
+else:
+    fl_data_loader = None
+log.info(f"Using schedule module: {SCHEDULE_MODULE}")
 
 # If True, disables the actual sending of emails.
 DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
@@ -56,7 +64,7 @@ class InstructorContactSystem:
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
-        self.id_matcher = None
+        # self.id_matcher = None # appease type checker; will be set in _initialize_data
         self.email_sender = None
         self.contact_by_instructor = {}
         self.contact_by_location = {}
@@ -94,26 +102,30 @@ class InstructorContactSystem:
                 raise FileNotFoundError(
                     "No FL_FILE_PATH found. This is a required file."
                 )
-            self.loader = data_loader.DataLoader(
-                fl_file_path=fl_file,
-                supported_locations=self.supported_locations,
-            )
 
-            current_date = datetime.now()
-            df = self.loader.semester_data(current_date)
+            df = pd.DataFrame()
+            if fl_data_loader:  # appease
+                self.loader = fl_data_loader.DataLoader(
+                    fl_file_path=fl_file,
+                    supported_locations=self.supported_locations,
+                )
+                current_date = datetime.now()
+                df = self.loader.semester_data(current_date)
 
-            self.aggregator = agg.Aggregator(df=df)
-            self.contact_by_instructor = self.aggregator.by_instructor()
-            self.contact_by_location = self.aggregator.by_location()
+            if not df.empty:
+                self.aggregator = agg.Aggregator(df=df)
+                self.contact_by_instructor = self.aggregator.by_instructor()
+                self.contact_by_location = self.aggregator.by_location()
 
             zoom_file = os.getenv("ID_TO_EMAIL_FILE_PATH")
             if not zoom_file:
                 raise FileNotFoundError(
                     "No ID_TO_EMAIL_FILE_PATH found. This is a required file."
                 )
-            self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
-            if not self.id_matcher:
-                raise ValueError("ID Matcher failed to initialize")
+            if matcher:  # appease
+                self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
+                if not self.id_matcher:
+                    raise ValueError("ID Matcher failed to initialize")
 
             self.email_sender = email_sender.EmailSender()
 
