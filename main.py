@@ -1,7 +1,8 @@
 import json
 import logging as log
 import os
-from datetime import datetime
+from datetime import date, datetime, time
+from typing import Optional, cast
 
 import flet as ft
 
@@ -26,8 +27,8 @@ log.info(f"Logging level set to {LOGGING_LEVEL}")
 # Maximum number of failed recipients to display in error messages
 MAX_FAILED_DISPLAY = 50
 
-SUPPORTED_LOCATIONS_MODE = os.getenv("SUPPORTED_LOCATIONS", "none")
-if SUPPORTED_LOCATIONS_MODE == "Chico":
+SUPPORTED_LOCATIONS_MODE = os.getenv("SUPPORTED_LOCATIONS_MODE", "none").lower()
+if SUPPORTED_LOCATIONS_MODE == "chico":
     from src import chico_supported_location_parser as slp
 else:
     slp = None
@@ -73,7 +74,7 @@ class InstructorContactSystem:
     def _initialize_data(self) -> None:
         """Initialize data loaders and aggregators."""
         try:
-            if slp and SUPPORTED_LOCATIONS_MODE == "Chico":
+            if slp and SUPPORTED_LOCATIONS_MODE == "chico":
                 slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
                 if not slp_csv:
                     raise FileNotFoundError(
@@ -172,6 +173,28 @@ class InstructorContactSystem:
         seen = set()
         return [e for e in emails if not (e in seen or seen.add(e))]
 
+    def _get_aggregated_data_for_date_range(
+        self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None
+    ) -> tuple[dict, dict]:
+        """Get aggregated data for a specific date range, or current semester if no range is provided."""
+        try:
+            if not self.loader:  # appease
+                log.error("Data loader is not initialized")
+                return {}, {}
+            if start_date is not None and end_date is not None:
+                df = self.loader.range_data(start_date, end_date)
+            else:
+                df = self.loader.semester_data(datetime.now())
+
+            if df is None or df.empty:
+                return {}, {}
+
+            temp_aggregator = agg.Aggregator(df=df)
+            return temp_aggregator.by_instructor(), temp_aggregator.by_location()
+        except Exception as e:
+            log.error(f"Error getting data for date range: {str(e)}")
+            return {}, {}
+
     # ---------- App logic ----------
 
     def _load_contact_history(self):
@@ -230,7 +253,9 @@ class InstructorContactSystem:
             slp_file = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
 
             fl_mod_time = get_file_mod_time(fl_file) if fl_file else "Not configured"
-            zoom_mod_time = get_file_mod_time(zoom_file) if zoom_file else "Not configured"
+            zoom_mod_time = (
+                get_file_mod_time(zoom_file) if zoom_file else "Not configured"
+            )
             slp_mod_time = get_file_mod_time(slp_file) if slp_file else "Not configured"
 
             diagnostics = f"""Server Diagnostics Report
@@ -342,16 +367,25 @@ This is an automated test email from the Instructor Contact System.
             self._show_snack(page, f"Error saving file: {str(ex)}")
 
     def _send_message_to_classroom(
-        self, page: ft.Page, building: str, room: str, message_template: str
+        self,
+        page: ft.Page,
+        building: str,
+        room: str,
+        message_template: str,
+        location_map: Optional[dict] = None,
     ):
         try:
             location_key = f"{building.upper()} {room.upper()}"
 
-            if location_key not in self.contact_by_location:
+            # Use provided location_map or fall back to cached data
+            if location_map is None:
+                location_map = self.contact_by_location
+
+            if location_key not in location_map:
                 self._show_snack(page, f"No classes found in {location_key}")
                 return
 
-            emp_ids = self.contact_by_location[location_key]
+            emp_ids = location_map[location_key]
             emails = []
             for emp_id in emp_ids:
                 email = self.id_matcher.match_id_to_email(emp_id)
@@ -675,6 +709,76 @@ Progress: {contacted}/{total_instructors}
                 prefix_icon=ft.Icons.MEETING_ROOM,
             )
 
+            # Store selected date range (optional)
+            selected_dates: dict[str, Optional[ft.DateTimeValue]] = {
+                "start": None,
+                "end": None,
+            }
+
+            # Display for selected date range
+            date_range_display = ft.Text(
+                "Date range: Current semester (default)",
+                size=12,
+                color=ft.Colors.BLUE_GREY_700,
+            )
+
+            def _value_to_date(v: ft.DateTimeValue) -> date:
+                # Flet may provide either date or datetime depending on platform/version
+                if isinstance(v, datetime):
+                    return v.date()
+                return cast(date, v)
+
+            def update_date_display():
+                start_v = selected_dates["start"]
+                end_v = selected_dates["end"]
+                if start_v and end_v:
+                    s = _value_to_date(start_v).strftime("%Y-%m-%d")
+                    ed = _value_to_date(end_v).strftime("%Y-%m-%d")
+                    date_range_display.value = f"Date range: {s} to {ed}"
+                elif start_v:
+                    s = _value_to_date(start_v).strftime("%Y-%m-%d")
+                    date_range_display.value = f"Start date: {s} (select end date)"
+                elif end_v:
+                    ed = _value_to_date(end_v).strftime("%Y-%m-%d")
+                    date_range_display.value = f"End date: {ed} (select start date)"
+                else:
+                    date_range_display.value = "Date range: Current semester (default)"
+
+            def clear_date_range(e):
+                selected_dates["start"] = None
+                selected_dates["end"] = None
+                update_date_display()
+                page.update()
+
+            def sync_date_range_from_picker():
+                # In many builds, the final selection is committed on "Save" (dismiss),
+                # so read directly from the control's properties.
+                selected_dates["start"] = cast(
+                    Optional[ft.DateTimeValue],
+                    getattr(date_range_picker, "start_value", None),
+                )
+                selected_dates["end"] = cast(
+                    Optional[ft.DateTimeValue],
+                    getattr(date_range_picker, "end_value", None),
+                )
+                update_date_display()
+                page.update()
+
+            # ---- Date range picker (single control) ----
+            date_range_picker = ft.DateRangePicker(
+                on_change=lambda e: sync_date_range_from_picker(),
+                on_dismiss=lambda e: sync_date_range_from_picker(),
+            )
+            page.overlay.append(date_range_picker)
+
+            def open_date_range_picker(e):
+                date_range_picker.open = True
+                page.update()
+
+            # (optional) keep this if referenced elsewhere; otherwise you can delete it
+            def handle_date_range_change(e):
+                sync_date_range_from_picker()
+
             message_input = ft.TextField(
                 label="Message template",
                 value=default_room_contact_message,
@@ -685,11 +789,80 @@ Progress: {contacted}/{total_instructors}
                 prefix_icon=ft.Icons.MESSAGE,
             )
 
+            def _get_date_filtered_location_map() -> Optional[dict]:
+                start_dt = selected_dates["start"]
+                end_dt = selected_dates["end"]
+
+                # If no dates selected, fetch current semester data
+                if not start_dt and not end_dt:
+                    log.debug("No date range selected, using current semester data")
+                    _, location_map = self._get_aggregated_data_for_date_range()
+                    return location_map
+
+                # Both dates must be provided if one is provided
+                if not start_dt or not end_dt:
+                    self._show_snack(
+                        page,
+                        "Please provide both start and end dates, or clear to use current semester",
+                    )
+                    return None
+
+                # Validate date range
+                if _value_to_date(start_dt) > _value_to_date(end_dt):
+                    self._show_snack(
+                        page, "Start date must be before or equal to end date"
+                    )
+                    return None
+
+                # Convert to inclusive datetime bounds for the data loader
+                start_datetime = datetime.combine(_value_to_date(start_dt), time.min)
+                end_datetime = datetime.combine(_value_to_date(end_dt), time.max)
+
+                log.info(f"Using date range filter: {start_datetime} to {end_datetime}")
+                _, location_map = self._get_aggregated_data_for_date_range(
+                    start_datetime, end_datetime
+                )
+                log.info(
+                    f"Filtered location map contains {len(location_map)} locations"
+                )
+                return location_map
+
             def on_search(e):
-                if building_input.value and room_input.value:
-                    self._lookup_classroom(page, building_input.value, room_input.value)
-                else:
+                if not (building_input.value and room_input.value):
                     self._show_snack(page, "Please enter building and room")
+                    return
+
+                location_map = _get_date_filtered_location_map()
+                if location_map is None:
+                    return
+
+                location_key = (
+                    f"{building_input.value.upper()} {room_input.value.upper()}"
+                )
+                if location_key not in location_map:
+                    self._show_snack(page, f"No classes found in {location_key}")
+                    return
+
+                emp_ids = location_map[location_key]
+                emails = [
+                    self.id_matcher.match_id_to_email(emp_id)
+                    for emp_id in emp_ids
+                    if self.id_matcher.match_id_to_email(emp_id)
+                ]
+
+                if not emails:
+                    self._show_snack(
+                        page, "No email matches found for instructors in this location"
+                    )
+                    return
+
+                dialog = self._create_copyable_dialog(
+                    page,
+                    f"Instructors in {location_key}",
+                    "\n".join(emails),
+                )
+                page.show_dialog(dialog)
+                page.update()
 
             def on_send(e):
                 if not (building_input.value and room_input.value):
@@ -699,14 +872,18 @@ Progress: {contacted}/{total_instructors}
                     self._show_snack(page, "Please enter a message")
                     return
 
+                location_map = _get_date_filtered_location_map()
+                if location_map is None:
+                    return
+
                 location_key = (
                     f"{building_input.value.upper()} {room_input.value.upper()}"
                 )
-                if location_key not in self.contact_by_location:
+                if location_key not in location_map:
                     self._show_snack(page, f"No classes found in {location_key}")
                     return
 
-                emp_ids = self.contact_by_location[location_key]
+                emp_ids = location_map[location_key]
                 emails = []
                 for emp_id in emp_ids:
                     email = self.id_matcher.match_id_to_email(emp_id)
@@ -763,6 +940,7 @@ Progress: {contacted}/{total_instructors}
                                     building_input.value,
                                     room_input.value,
                                     message_input.value,
+                                    location_map,
                                 ),
                             ),
                         ),
@@ -781,10 +959,27 @@ Progress: {contacted}/{total_instructors}
                             weight=ft.FontWeight.W_600,
                         ),
                         ft.Text(
-                            "Optional: write a message and send it to all instructors teaching in that classroom. Use {location} as a placeholder.",
+                            "Optional: select a date range to filter classes. If not specified, defaults to current semester. Use {location} as a placeholder in the message.",
                             size=12,
                         ),
                         ft.Row([building_input, room_input], spacing=12, wrap=True),
+                        ft.Row(
+                            [
+                                ft.OutlinedButton(
+                                    "Select date range",
+                                    icon=ft.Icons.DATE_RANGE,
+                                    on_click=open_date_range_picker,
+                                ),
+                                ft.OutlinedButton(
+                                    "Clear dates",
+                                    icon=ft.Icons.CLEAR,
+                                    on_click=clear_date_range,
+                                ),
+                            ],
+                            spacing=12,
+                            wrap=True,
+                        ),
+                        date_range_display,
                         ft.Row(
                             [
                                 ft.FilledButton(
