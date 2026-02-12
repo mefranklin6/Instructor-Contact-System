@@ -136,13 +136,6 @@ class InstructorContactSystem:
 
     # ---------- Flet 0.80.x helpers ----------
 
-    def _get_clipboard(self, page: ft.Page) -> ft.Clipboard:
-        if self._clipboard is None:
-            self._clipboard = ft.Clipboard()
-            page.overlay.append(self._clipboard)
-            page.update()
-        return self._clipboard
-
     def _show_snack(self, page: ft.Page, message: str):
         page.show_dialog(ft.SnackBar(ft.Text(message)))
         page.update()
@@ -267,7 +260,7 @@ class InstructorContactSystem:
                 return "File not found"
 
             fl_file = os.getenv("FL_FILE_PATH")
-            zoom_file = os.getenv("ZOOM_FILE_PATH")
+            zoom_file = os.getenv("ID_TO_EMAIL_FILE_PATH")
             slp_file = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
 
             fl_mod_time = get_file_mod_time(fl_file) if fl_file else "Not configured"
@@ -288,7 +281,8 @@ Application Status:
 - DEV_MODE: {DEV_MODE}
 - Logging Level: {LOGGING_LEVEL}
 - Supported Locations Mode: {SUPPORTED_LOCATIONS_MODE}
-- ID to Email Module: {ID_TO_EMAIL_MODULE}
+- ID to Email Mode: {ID_TO_EMAIL_MODULE}
+- Schedule Module: {SCHEDULE_MODULE}
 
 Data Status:
 - Total Instructors: {len(self.contact_by_instructor)}
@@ -347,24 +341,6 @@ This is an automated test email from the Instructor Contact System.
 
         except Exception as e:
             log.error(f"Error sending test email: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
-
-    def _download_contact_history(self, page: ft.Page, file_picker: ft.FilePicker):
-        """Allow user to download the contact history JSON file."""
-        try:
-            contact_file = self._get_contact_file_path()
-            if not os.path.exists(contact_file):
-                self._show_snack(page, "No contact history found")
-                return
-
-            # Trigger the file picker to save
-            _ = file_picker.save_file(
-                file_name="contact_history.json",
-                allowed_extensions=["json"],
-            )
-
-        except Exception as e:
-            log.error(f"Error downloading contact history: {str(e)}")
             self._show_snack(page, f"Error: {str(e)}")
 
     def _on_save_file_result(self, page: ft.Page, e):
@@ -792,10 +768,6 @@ Progress: {contacted}/{total_instructors}
             def open_date_range_picker(e):
                 date_range_picker.open = True
                 page.update()
-
-            # (optional) keep this if referenced elsewhere; otherwise you can delete it
-            def handle_date_range_change(e):
-                sync_date_range_from_picker()
 
             subject_input = ft.TextField(
                 label="Subject",
