@@ -35,23 +35,11 @@ The system supports communication in two directions:
 - Location- and time-driven instructor lookup  
 - Integration with class scheduling data  
 - Automatic instructor ID to email address resolution  
-- Deduplication of recipients  
-- Dynamic variable injection (e.g., room number)  
-- User-authored email templates  
-- Controlled "wave" sending to manage response volume  
-- On-demand execution  
+- User-authored email templates with dynamic variable injection
+- Controlled "wave" sending to manage response volume for campus-wide scenarios
 - All contact recorded through a persistent Docker volume
 - Test mode with server diagnostics
 - GUI is built using flet, so it is multi-platform and even works on mobile
-
-## How It Works
-
-1. Select classroom(s) and define a time range.
-2. Query scheduling data for associated instructor IDs.
-3. Match instructor IDs to institutional email addresses.
-
-4. Inject room-specific variables into a predefined email template.
-5. Send emails immediately or in controlled batches.
 
 ## Primary Use Cases
 
@@ -60,25 +48,15 @@ The system supports communication in two directions:
 - Communicating equipment replacements or room configuration changes  
 - Sending targeted updates to all users of a specific space  
 - Providing instructors with a consolidated list of the rooms they teach in  
-- Distributing classroom-related surveys or feedback requests  
-
----
+- Distributing classroom-related surveys or feedback requests
 
 ## Goals
 
 - Improve operational efficiency  
 - Reduce manual administrative coordination  
-- Enable faster issue identification and response  
+- Enable faster issue response  
 - Provide scalable communication tools as campus grows  
 - Support reliable teaching and learning environments  
-
----
-
-## Strategic Alignment
-
-- Streamlined processes and adaptive workflows  
-- Operational efficiency and effectiveness  
-- Innovation and scalable service delivery  
 
 ## Requirements
 
@@ -113,6 +91,8 @@ This system is designed to be modular, but was built with Chico State's tech sta
 
 5. `cd` to your repository root and run `docker compose up`
 
+6. The webserver is at `http://<your_address_or_localhost>:8080`
+
 ## Contributing
 
 1. Make a branch of the project under your own Github account
@@ -125,8 +105,7 @@ This system is designed to be modular, but was built with Chico State's tech sta
 
 ### Do
 
-- Make sure you don't commit any secrets
-- Develop with the goal of this being open-source
+- Make sure you don't commit any secrets or campus-specific data
 - Add logging
 - Add methods that can be used across modules to /src/utils
 
@@ -143,8 +122,6 @@ log.debug("This is for traces")
 - Type Annotations
 
 ### Run
-
-In a terminal:
 
 ```powershell
 cd <to your cloned the repo>
