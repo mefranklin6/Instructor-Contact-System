@@ -718,8 +718,7 @@ Progress: {contacted}/{total_instructors}
             # Display for selected date range
             date_range_display = ft.Text(
                 "Date range: Current semester (default)",
-                size=12,
-                color=ft.Colors.BLUE_GREY_700,
+                size=16,
             )
 
             def _value_to_date(v: ft.DateTimeValue) -> date:
@@ -955,12 +954,12 @@ Progress: {contacted}/{total_instructors}
                     [
                         ft.Text(
                             "Lookup instructors by classroom",
-                            size=20,
+                            size=24,
                             weight=ft.FontWeight.W_600,
                         ),
                         ft.Text(
                             "Optional: select a date range to filter classes. If not specified, defaults to current semester. Use {location} as a placeholder in the message.",
-                            size=12,
+                            size=16,
                         ),
                         ft.Row([building_input, room_input], spacing=12, wrap=True),
                         ft.Row(
@@ -996,7 +995,10 @@ Progress: {contacted}/{total_instructors}
                             spacing=12,
                             wrap=True,
                         ),
-                        message_input,
+                        ft.Container(
+                            content=message_input,
+                            padding=ft.Padding(top=24, left=0, right=0, bottom=0),
+                        ),
                     ],
                     spacing=16,
                 ),
@@ -1022,7 +1024,7 @@ Progress: {contacted}/{total_instructors}
                     [
                         ft.Text(
                             "Lookup classes by instructor",
-                            size=20,
+                            size=24,
                             weight=ft.FontWeight.W_600,
                         ),
                         email_input,
@@ -1037,7 +1039,7 @@ Progress: {contacted}/{total_instructors}
 
         def build_view_deployment() -> ft.Control:
             already_contacted_text = ft.Text(
-                f"Already contacted: {self._get_already_contacted_count()}", size=12
+                f"Already contacted: {self._get_already_contacted_count()}", size=16
             )
             self._deployment_already_contacted_text = already_contacted_text
 
@@ -1095,7 +1097,7 @@ Progress: {contacted}/{total_instructors}
                     spacing=16,
                     scroll=ft.ScrollMode.AUTO,
                 ),
-                padding=ft.Padding.all(16),
+                padding=ft.Padding(left=16, right=16, top=0, bottom=16),
             )
 
         def build_view_utility() -> ft.Control:
@@ -1144,10 +1146,10 @@ Progress: {contacted}/{total_instructors}
                     [
                         ft.Text("Utility", size=24, weight=ft.FontWeight.W_600),
                         ft.Divider(),
-                        ft.Text("Contact History", size=18, weight=ft.FontWeight.W_500),
+                        ft.Text("Contact History", size=22, weight=ft.FontWeight.W_500),
                         ft.Text(
                             "Download the contact history JSON file to view all contacted instructors.",
-                            size=12,
+                            size=16,
                         ),
                         ft.FilledButton(
                             content="Download Contact History",
@@ -1155,10 +1157,10 @@ Progress: {contacted}/{total_instructors}
                             on_click=on_download_history,
                         ),
                         ft.Divider(),
-                        ft.Text("Test Email", size=18, weight=ft.FontWeight.W_500),
+                        ft.Text("Test Email", size=22, weight=ft.FontWeight.W_500),
                         ft.Text(
                             "Send a test email with server diagnostic information.",
-                            size=12,
+                            size=16,
                         ),
                         test_email_input,
                         ft.FilledButton(
@@ -1193,12 +1195,12 @@ Progress: {contacted}/{total_instructors}
                 ft.NavigationRailDestination(
                     icon=ft.Icons.MEETING_ROOM_OUTLINED,
                     selected_icon=ft.Icons.MEETING_ROOM,
-                    label="By classroom",
+                    label="By Classroom",
                 ),
                 ft.NavigationRailDestination(
                     icon=ft.Icons.PERSON_SEARCH_OUTLINED,
                     selected_icon=ft.Icons.PERSON_SEARCH,
-                    label="By instructor",
+                    label="By Instructor",
                 ),
                 ft.NavigationRailDestination(
                     icon=ft.Icons.ROCKET_LAUNCH_OUTLINED,

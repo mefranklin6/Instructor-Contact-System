@@ -1,24 +1,132 @@
 # Instructor-Contact-System
 
-TDx Project 409007
+An automated, location and time-driven email system developed by Chico State to support efficient communication with instructors about classroom technology and facilities.
+
+## Overview
+
+This system enables technicians to quickly identify and contact instructors based on where and when they teach.
+
+The system is designed to ensure reliable classroom environments by making it easier to communicate proactively and reactively with instructors across campus.
+
+## Background
+
+For many years, Chico State CTS conducted early-semester outreach by manually emailing instructors to confirm that classroom technology was functioning as expected and to encourage early reporting of issues. As the campus grew, this approach became difficult to sustain due to:
+
+- An increased number of classrooms  
+- More complex scheduling  
+- Reduced availability of student worker hours  
+
+This system automates that process while expanding its capabilities.
+
+## Core Capabilities
+
+### Two-Way Communication Model
+
+The system supports communication in two directions:
+
+1. **Room → Instructors**  
+   Contact all instructors scheduled to teach in a specific classroom or group of classrooms within a defined time window.
+
+2. **Instructor → Rooms**  
+   Identify all rooms an instructor is scheduled to teach in and tailor communication accordingly.
+
+## Features
+
+- Location- and time-driven instructor lookup  
+- Integration with class scheduling data  
+- Automatic instructor ID to email address resolution  
+- Deduplication of recipients  
+- Dynamic variable injection (e.g., room number)  
+- User-authored email templates  
+- Controlled "wave" sending to manage response volume  
+- On-demand execution  
+- All contact recorded through a persistent Docker volume
+- Test mode with server diagnostics
+- GUI is built using flet, so it is multi-platform and even works on mobile
+
+## How It Works
+
+1. Select classroom(s) and define a time range.
+2. Query scheduling data for associated instructor IDs.
+3. Match instructor IDs to institutional email addresses.
+
+4. Inject room-specific variables into a predefined email template.
+5. Send emails immediately or in controlled batches.
+
+## Primary Use Cases
+
+- Early-semester outreach to confirm classroom readiness  
+- Notifying instructors of power outages or facilities issues  
+- Communicating equipment replacements or room configuration changes  
+- Sending targeted updates to all users of a specific space  
+- Providing instructors with a consolidated list of the rooms they teach in  
+- Distributing classroom-related surveys or feedback requests  
+
+---
+
+## Goals
+
+- Improve operational efficiency  
+- Reduce manual administrative coordination  
+- Enable faster issue identification and response  
+- Provide scalable communication tools as campus grows  
+- Support reliable teaching and learning environments  
+
+---
+
+## Strategic Alignment
+
+- Streamlined processes and adaptive workflows  
+- Operational efficiency and effectiveness  
+- Innovation and scalable service delivery  
+
+## Requirements
+
+This system is designed to be modular, but was built with Chico State's tech stack first. In a perfect world, all data would be gathered by API calls, but that is not our current reality. In order to use different systems and data sources, additional modules will need to be written. As of today, the following data sources are supported:
+
+### Calendar Data (required)
+
+- The CSV that is exported from PeopleSoft and ingested by MetaBIM Facilities Link
+
+### Employee ID to Email key (required)
+
+- The CSV Users Report from Zoom Admin center
+- Future: Zoom API
+
+### Supported Locations (for now, Chico only and fully optional)
+
+- Sharepoint CSV export of the Supported Locations page
+
+### Docker Runtime
+
+- Linux, or Windows through Rancher Desktop
 
 ## Setup
 
-1. Make a branch of the project
+1. Make sure Docker Engine is installed and running. (If using Windows, suggest installing Rancher Desktop)
 
-2. Make sure Rancher Desktop is installed and running (not Docker Desktop)
+2. Clone the project locally
 
-3. Clone the branch
+3. Make a file called `.env` in the root of the repository. Copy the `env.example` contents into it and change the settings as needed.
 
-4. Make a file called `.env` in the root of this repository. Copy the `env.example` contents into it and change the settings.
+4. Make a file called `messages.py` in the root of the repository. Copy the `messages.py.example` contents into it and change the settings as needed.
 
-5. Make your feature in it's own file and as modular as possible.  Ex: /src/data_loader/data_loader.py with class DataLoader.
+5. `cd` to your repository root and run `docker compose up`
 
-## Do
+## Contributing
+
+1. Make a branch of the project under your own Github account
+
+2. Follow the 'Setup' steps documented above, but clone your own branch
+
+3. Make your feature in its' own file and as modular as possible.  Ex: /src/data_loader.py with class DataLoader.
+
+4. Send a pull request when ready
+
+### Do
 
 - Make sure you don't commit any secrets
 - Develop with the goal of this being open-source
-- Send pull requests for review before merge into main
 - Add logging
 - Add methods that can be used across modules to /src/utils
 
@@ -28,14 +136,13 @@ log.warning("This is a warning")
 log.debug("This is for traces")
 ```
 
-## Style
+### Style
 
-- Black Formatter to run *on save*
-- iSort import formatter. (some style will be overwritten by black)
+- Ruff linter and formatter
 - PEP 8
 - Type Annotations
 
-## Run
+### Run
 
 In a terminal:
 
