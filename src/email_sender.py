@@ -4,14 +4,16 @@ import logging as log
 
 
 class EmailSender:
-
     def __init__(self) -> None:
-        self.smtp_host = os.getenv("SMTP_HOST", "smtp.csuchico.edu")
-        self.smtp_port = 587
-        self.smtp_from = os.getenv("SMTP_FROM", "classroom@csuchico.edu")
-        self.smtp_user = None
-        self.smtp_pass = None
-        # TODO: add credentials and remove defaults
+        self.smtp_host = os.getenv("SMTP_HOST", "")
+        self.smtp_port = int(os.getenv("SMTP_PORT", 587))
+        self.smtp_from = os.getenv("SMTP_FROM", "")
+        self.smtp_user = os.getenv("SMTP_USER", "")
+        self.smtp_pass = os.getenv("SMTP_PASS", "")
+
+        if not self.smtp_host or not self.smtp_from:
+            log.error("SMTP_HOST and SMTP_FROM environment variables must be set.")
+            raise ValueError("Missing required SMTP configuration.")
 
     def send(self, to_addr, subject, message) -> bool:
         message = f"""From: {self.smtp_from}
@@ -19,6 +21,7 @@ To: {to_addr}
 Subject: {subject}
 
 {message}"""
+
         try:
             with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as smtp:
                 if self.smtp_user and self.smtp_pass:
@@ -31,5 +34,4 @@ Subject: {subject}
 
 
 if __name__ == "__main__":
-    test = EmailSender()
-    test.send("mefranklin@csuchico.edu", "Test EmailSender", "hello\rworld")
+    pass
