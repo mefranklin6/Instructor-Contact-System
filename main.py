@@ -15,7 +15,6 @@ from messages_ import (
     default_semester_start_subject,
 )
 from src import data_loader, email_sender
-from src import id_matcher_from_zoom_users as matcher
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -34,6 +33,13 @@ else:
     slp = None
 log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS_MODE}")
 
+ID_TO_EMAIL_MODULE=os.getenv("ID_TO_EMAIL_MODULE", "none").lower()
+if ID_TO_EMAIL_MODULE == "zoom":
+    from src import id_matcher_from_zoom_users as matcher
+else:
+    matcher = None
+log.info(f"Using ID to email module: {ID_TO_EMAIL_MODULE}")
+
 # If True, disables the actual sending of emails.
 DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
 
@@ -50,7 +56,7 @@ class InstructorContactSystem:
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
-        # self.id_matcher = None # appease
+        self.id_matcher = None
         self.email_sender = None
         self.contact_by_instructor = {}
         self.contact_by_location = {}
@@ -100,10 +106,10 @@ class InstructorContactSystem:
             self.contact_by_instructor = self.aggregator.by_instructor()
             self.contact_by_location = self.aggregator.by_location()
 
-            zoom_file = os.getenv("ZOOM_FILE_PATH")
+            zoom_file = os.getenv("ID_TO_EMAIL_FILE_PATH")
             if not zoom_file:
                 raise FileNotFoundError(
-                    "No ZOOM_FILE_PATH found. This is a required file."
+                    "No ID_TO_EMAIL_FILE_PATH found. This is a required file."
                 )
             self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
             if not self.id_matcher:
@@ -270,6 +276,7 @@ Application Status:
 - DEV_MODE: {DEV_MODE}
 - Logging Level: {LOGGING_LEVEL}
 - Supported Locations Mode: {SUPPORTED_LOCATIONS_MODE}
+- ID to Email Module: {ID_TO_EMAIL_MODULE}
 
 Data Status:
 - Total Instructors: {len(self.contact_by_instructor)}
