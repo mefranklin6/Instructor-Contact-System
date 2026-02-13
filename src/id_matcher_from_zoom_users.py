@@ -1,22 +1,29 @@
+"""ID Matcher for Zoom Users CSV exports."""
+
+import contextlib
 import logging as log
+
 import pandas as pd
 
 
 class Matcher:
-    """
-    This module is designed to take the Zoom Users exported report under:
-    Zoom Admin > Users > Export.
-    The local path to this file is param 'csv_file_path'
+    """This module is designed to take the Zoom Users exported report.
+
+    You can export that report from
+
+    The local path to this file is param 'csv_file_path'.
 
     This is only one way of gathering this data, but you could also use the Zoom API,
-    or a Peoplesoft report, etc.  Replace this module with your perferred method.
+    or a Peoplesoft report, etc.  Replace this module with your preferred method.
     """
 
     def __init__(self, csv_file_path: str) -> None:
-        """
+        """Initialize the Matcher with a CSV file path.
+
         Args:
-            csv_file_path: Path to CSV file exported from Zoom Users report
+            csv_file_path: Path to CSV file exported from Zoom Users report.
         """
+
         self.csv_file_path = csv_file_path
         self.id_to_email_map = self._load_mapping()
 
@@ -44,9 +51,7 @@ class Matcher:
         df = df[df["Employee ID"].str.replace(".", "", regex=False).str.isdigit()]
 
         # Convert to numeric and pad with zeros to 9 digits
-        df["Employee ID"] = (
-            df["Employee ID"].astype(float).astype(int).astype(str).str.zfill(9)
-        )
+        df["Employee ID"] = df["Employee ID"].astype(float).astype(int).astype(str).str.zfill(9)
 
         # Filter out invalid emails (must contain "@" and not be empty)
         df = df[df["Email"].str.contains("@", na=False)]
@@ -66,10 +71,8 @@ class Matcher:
             return ""
         # Handle common "123.0" shape from CSV/Excel casts
         if s.replace(".", "", 1).isdigit():
-            try:
+            with contextlib.suppress(Exception):
                 s = str(int(float(s)))
-            except Exception:
-                pass
         if not s.isdigit():
             return ""
         return s.zfill(9)

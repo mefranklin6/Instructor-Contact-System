@@ -1,13 +1,17 @@
-import logging as log
+"""Aggregator for FacilitiesLink schedule data."""
 
 import pandas as pd
 
 
 class Aggregator:
+    """Aggregates data from the FacilitiesLink schedule CSV.
+
+    Args:
+        df: A pandas DataFrame containing the cleaned schedule data from FacilitiesLink.
     """
-    param df: The cleansed dataframe derived from the FacilitiesLink schedule CSV
-    """
+
     def __init__(self, df: pd.DataFrame) -> None:
+        """Initialize the Aggregator with a DataFrame."""
         self.df = df
 
     def by_instructor(self) -> dict:

@@ -1,3 +1,5 @@
+"""Chico Supported Locations Parser."""
+
 import logging as log
 import re
 
@@ -5,11 +7,10 @@ from src.utils import csv_to_dataframe
 
 
 class SupportedLocationsParser:
-    """
-    This is a optional and Chico-specific parser that takes a
-    'Supported Locations' Sharepoint page CSV export for narrowing down scope"""
+    """This is a optional and Chico-specific Sharepoint CSV parser."""
 
     def __init__(self, file_path: str) -> None:
+        """Initialize the SupportedLocationsParser with the given file path."""
         self.file_path = file_path
         # Match 3-4 uppercase letters (building), optional whitespace/dash, then rest (room)
         self.pattern = re.compile(r"^([A-Z]{3,4})[\s\-]*(.+)$")
@@ -19,6 +20,9 @@ class SupportedLocationsParser:
         try:
             result: list[tuple[str, str]] = []
             df = csv_to_dataframe(self.file_path)
+            if df is None:
+                log.error("Failed to load supported locations CSV.")
+                return []
             df = df[df["Contact"] == "CTS"]
             building_room = df["Room"].tolist()
 

@@ -1,6 +1,7 @@
-import logging as log
+"""Data loader for FacilitiesLink schedule CSV exports."""
+
 from datetime import datetime, timedelta
-from typing import Optional
+import logging as log
 
 import pandas as pd
 
@@ -9,6 +10,8 @@ from src.utils import csv_to_dataframe, raise_error_window
 
 class DataLoader:
     """
+    Loads and filters data from the FacilitiesLink schedule CSV export.
+
     Args:
         fl_file_path: The calendar CSV that gets exported to FacilitiesLink
 
@@ -19,20 +22,27 @@ class DataLoader:
     def __init__(
         self,
         fl_file_path: str,
-        supported_locations: Optional[list[tuple[str, str]]] = None,
+        supported_locations: list[tuple[str, str]] | None = None,
     ) -> None:
+        """Initialize the DataLoader with the given file path and optional supported locations filter."""
         self.file_path = fl_file_path
         self.supported_locations = supported_locations
         self.clean_df = self._load_and_clean()
 
-    def semester_data(self, date: datetime) -> pd.DataFrame:
+    def semester_data(self, date: datetime) -> pd.DataFrame | None:
         """
         Load and filter data to include only classes within the semester of the given date.
+
         Args:
             date (datetime): A date within the semester to filter for.
+
         Returns:
-            pd.DataFrame: The filtered DataFrame.
+            pd.DataFrame | None: The filtered DataFrame, or None if cleaning failed.
         """
+        if self.clean_df is None:
+            log.error("Failed to load clean dataframe")
+            return pd.DataFrame()
+
         log.debug(f"Loading data from {self.file_path}")
         df = self.clean_df.copy()
         df = self._filter_to_semester(df, date)
@@ -48,6 +58,10 @@ class DataLoader:
           in [start_date, end_date].
         """
         try:
+            if self.clean_df is None:
+                log.error("Failed to load clean dataframe")
+                return pd.DataFrame()
+
             start = pd.to_datetime(start_date).normalize()
             end = pd.to_datetime(end_date).normalize()
 
@@ -79,20 +93,24 @@ class DataLoader:
 
         except Exception as e:
             raise_error_window(
-                f"An error occurred while filtering to date range: {str(e)}",
+                f"An error occurred while filtering to date range: {e!s}",
                 title="Range Filtering Error",
             )
-            log.error(f"Range filtering error: {str(e)}")
+            log.error(f"Range filtering error: {e!s}")
             return pd.DataFrame()
 
     def _expand_to_meeting_dates(
         self, df: pd.DataFrame, start_date: pd.Timestamp, end_date: pd.Timestamp
     ) -> pd.DataFrame:
         """
-        Filters to class rows that meet at least once within [start_date, end_date],
-        using DAYS1 meeting weekdays + class span.
+        Filters to class rows that meet at least once within [start_date, end_date].
 
         This does NOT expand to per-occurrence rows; it keeps original class rows.
+
+        Args:
+            df: DataFrame with CLASS_START_DATE, CLASS_END_DATE, DAYS1 columns
+            start_date: start of the date range to filter for
+            end_date: end of the date range to filter for
         """
         # Map day codes to Python weekday numbers (Monday=0, Sunday=6)
         day_map = {"M": 0, "T": 1, "W": 2, "R": 3, "F": 4, "S": 5, "U": 6}
@@ -108,9 +126,7 @@ class DataLoader:
             return pd.DataFrame()
 
         # Only consider classes whose span overlaps the requested window
-        df = df[
-            (df["CLASS_START_DATE"] <= end_date) & (df["CLASS_END_DATE"] >= start_date)
-        ].copy()
+        df = df[(df["CLASS_START_DATE"] <= end_date) & (df["CLASS_END_DATE"] >= start_date)].copy()
         if df.empty:
             return pd.DataFrame()
 
@@ -118,9 +134,7 @@ class DataLoader:
         df["search_start"] = df["CLASS_START_DATE"].where(
             df["CLASS_START_DATE"] > start_date, start_date
         )
-        df["search_end"] = df["CLASS_END_DATE"].where(
-            df["CLASS_END_DATE"] < end_date, end_date
-        )
+        df["search_end"] = df["CLASS_END_DATE"].where(df["CLASS_END_DATE"] < end_date, end_date)
 
         def parse_days(days_str: str) -> set[int]:
             s = str(days_str).strip().upper()
@@ -133,6 +147,8 @@ class DataLoader:
 
         def meets_in_window(row) -> bool:
             """
+            Determines if a class meets within the specified date range.
+
             For each meeting weekday, compute the first date >= search_start that has that weekday.
             If any such date is <= search_end, the class meets in the window.
             """
@@ -150,20 +166,23 @@ class DataLoader:
         mask = df.apply(meets_in_window, axis=1)
         result_df = df.loc[mask].copy()
 
-        return result_df.drop(
-            columns=["search_start", "search_end", "meeting_weekdays"]
-        )
+        return result_df.drop(columns=["search_start", "search_end", "meeting_weekdays"])
 
-    def _load_and_clean(self) -> pd.DataFrame:
+    def _load_and_clean(self) -> pd.DataFrame | None:
         df = csv_to_dataframe(self.file_path)
-        df = self._clean_dataframe(df)
-        df = self._convert_dates(df)
-        if self.supported_locations:
-            df = self._filter_to_supported_locations(df)
-        return df
+        if df is not None:
+            df = self._clean_dataframe(df)
+            if df is not None:
+                df = self._convert_dates(df)
+            if df is not None and self.supported_locations:
+                return self._filter_to_supported_locations(df)
+            return df
+        return None
 
-    def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame | None:
         """
+        Cleans the DataFrame by removing invalid or irrelevant rows.
+
         - Removes rows with missing values in critical columns.
         - Excludes online courses.
         - Excludes courses with 'TBA' schedules.
@@ -193,16 +212,10 @@ class DataLoader:
                 filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
             )
             filtered_df = filtered_df[
-                filtered_df["INSTRUCTOR1_EMPLID"]
-                .str.replace(".", "", regex=False)
-                .str.isdigit()
+                filtered_df["INSTRUCTOR1_EMPLID"].str.replace(".", "", regex=False).str.isdigit()
             ]
             filtered_df["INSTRUCTOR1_EMPLID"] = (
-                filtered_df["INSTRUCTOR1_EMPLID"]
-                .astype(str)
-                .astype(int)
-                .astype(str)
-                .str.zfill(9)
+                filtered_df["INSTRUCTOR1_EMPLID"].astype(str).astype(int).astype(str).str.zfill(9)
             )
 
             log.debug(
@@ -211,22 +224,18 @@ class DataLoader:
             return filtered_df
         except Exception as e:
             raise_error_window(
-                f"An error occurred while filtering the data: {str(e)}",
+                f"An error occurred while filtering the data: {e!s}",
                 title="Filtering Error",
             )
-            log.error(f"Filtering error: {str(e)}")
-            return pd.DataFrame()
+            log.error(f"Filtering error: {e!s}")
+            return None
 
-    def _convert_dates(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _convert_dates(self, df: pd.DataFrame) -> pd.DataFrame | None:
         """Convert date columns from string format to datetime objects."""
         try:
             # Primary expected format from FacilitiesLink exports
-            start = pd.to_datetime(
-                df["CLASS_START_DATE"], format="%d-%b-%y", errors="coerce"
-            )
-            end = pd.to_datetime(
-                df["CLASS_END_DATE"], format="%d-%b-%y", errors="coerce"
-            )
+            start = pd.to_datetime(df["CLASS_START_DATE"], format="%d-%b-%y", errors="coerce")
+            end = pd.to_datetime(df["CLASS_END_DATE"], format="%d-%b-%y", errors="coerce")
 
             # Fallback: let pandas infer format for any rows that didn't parse
             if start.isna().any():
@@ -235,9 +244,7 @@ class DataLoader:
                 )
                 start.loc[start.isna()] = start_fallback
             if end.isna().any():
-                end_fallback = pd.to_datetime(
-                    df.loc[end.isna(), "CLASS_END_DATE"], errors="coerce"
-                )
+                end_fallback = pd.to_datetime(df.loc[end.isna(), "CLASS_END_DATE"], errors="coerce")
                 end.loc[end.isna()] = end_fallback
 
             df["CLASS_START_DATE"] = start
@@ -254,20 +261,17 @@ class DataLoader:
             return df
         except Exception as e:
             raise_error_window(
-                f"An error occurred while converting dates: {str(e)}",
+                f"An error occurred while converting dates: {e!s}",
                 title="Date Conversion Error",
             )
-            log.error(f"Date conversion error: {str(e)}")
-            return df
+            log.error(f"Date conversion error: {e!s}")
+            return None
 
-    def _filter_to_semester(self, df: pd.DataFrame, date: datetime) -> pd.DataFrame:
+    def _filter_to_semester(self, df: pd.DataFrame, date: datetime) -> pd.DataFrame | None:
         try:
             before_rows = len(df)
             target_date = pd.to_datetime(date).normalize()  # Strip time component
-            df = df[
-                (df["CLASS_START_DATE"] <= target_date)
-                & (df["CLASS_END_DATE"] >= target_date)
-            ]
+            df = df[(df["CLASS_START_DATE"] <= target_date) & (df["CLASS_END_DATE"] >= target_date)]
 
             # All classes within a semester should have the same TERM value
             term_is_all_the_same = df["TERM"].nunique() <= 1
@@ -282,18 +286,18 @@ class DataLoader:
             return df
         except Exception as e:
             raise_error_window(
-                f"An error occurred while filtering to the current semester: {str(e)}",
+                f"An error occurred while filtering to the current semester: {e!s}",
                 title="Semester Filtering Error",
             )
-            log.error(f"Semester filtering error: {str(e)}")
-            return pd.DataFrame()
+            log.error(f"Semester filtering error: {e!s}")
+            return None
 
-    def _filter_to_supported_locations(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _filter_to_supported_locations(self, df: pd.DataFrame) -> pd.DataFrame | None:
         try:
             initial_rows = len(df)
 
             supported_set = set(self.supported_locations or [])
-            df["_location_tuple"] = list(zip(df["BUILDING"], df["ROOM"]))
+            df["_location_tuple"] = list(zip(df["BUILDING"], df["ROOM"], strict=False))
             df = df[df["_location_tuple"].isin(supported_set)]
             df = df.drop(columns=["_location_tuple"])
             log.debug(
@@ -303,8 +307,8 @@ class DataLoader:
 
         except Exception as e:
             raise_error_window(
-                f"An error occurred while filtering to supported locations: {str(e)}",
+                f"An error occurred while filtering to supported locations: {e!s}",
                 title="Supported Locations Filtering Error",
             )
-            log.error(f"Supported locations filtering error: {str(e)}")
-            return pd.DataFrame()
+            log.error(f"Supported locations filtering error: {e!s}")
+            return None

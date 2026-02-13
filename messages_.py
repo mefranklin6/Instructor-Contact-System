@@ -1,3 +1,5 @@
+"""User-generated message templates for contacting instructors."""
+
 default_semester_start_subject = "Classroom Technology Check-In"
 
 # '{locations}' will be replaced with a list of every supported classroom that an instructor teaches in

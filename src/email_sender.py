@@ -1,21 +1,36 @@
+"""Email sender module."""
+
+import logging as log
 import os
 import smtplib
-import logging as log
 
 
 class EmailSender:
+    """Handles sending emails using SMTP."""
+
     def __init__(self) -> None:
+        """Initialize the EmailSender with SMTP configuration from environment variables."""
         self.smtp_host = os.getenv("SMTP_HOST", "")
         self.smtp_port = int(os.getenv("SMTP_PORT", 587))
         self.smtp_from = os.getenv("SMTP_FROM", "")
-        self.smtp_user = os.getenv("SMTP_USER", "")
-        self.smtp_pass = os.getenv("SMTP_PASS", "")
+        self.smtp_user = os.getenv("SMTP_USERNAME", "")
+        self.smtp_pass = os.getenv("SMTP_PASSWORD", "")
 
         if not self.smtp_host or not self.smtp_from:
             log.error("SMTP_HOST and SMTP_FROM environment variables must be set.")
             raise ValueError("Missing required SMTP configuration.")
 
     def send(self, to_addr, subject, message) -> bool:
+        """Send an email.
+
+        Args:
+            to_addr: The recipient's email address.
+            subject: The subject of the email.
+            message: The body of the email.
+
+        Returns:
+            True if the email was sent successfully, False otherwise.
+        """
         message = f"""From: {self.smtp_from}
 To: {to_addr}
 Subject: {subject}
