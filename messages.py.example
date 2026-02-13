@@ -1,3 +1,5 @@
+"""User-generated message templates for contacting instructors."""
+
 default_semester_start_subject = "Classroom Technology Check-In"
 
 # '{locations}' will be replaced with a list of every supported classroom that an instructor teaches in
@@ -9,7 +11,7 @@ If any of the technology isn't working as expected, or if there's anything we ca
 Best regards,
 Classroom Technology Services
 your_email@your_org.edu
-530-555-1234"""
+555-555-5555
 
 # ------------------------------------------------------------------------------------------------------------------
 
