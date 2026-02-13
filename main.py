@@ -19,7 +19,7 @@ log.basicConfig(
 log.info(f"Logging level set to {LOGGING_LEVEL}")
 
 try:
-    from messages_ import (
+    from messages import (
         default_room_contact_message,
         default_room_contact_subject,
         default_semester_start_message,
