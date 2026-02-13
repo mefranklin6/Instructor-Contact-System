@@ -85,9 +85,7 @@ class DataLoader:
                 f"Filtered to date range {start.date()} - {end.date()}. "
                 f"Rows before: {before_rows}, Rows after: {len(filtered)}"
             )
-            log.info(
-                f"Unique locations after filter: {len(filtered.groupby(['BUILDING', 'ROOM']))}"
-            )
+            log.info(f"Unique locations after filter: {len(filtered.groupby(['BUILDING', 'ROOM']))}")
 
             return filtered
 
@@ -131,9 +129,7 @@ class DataLoader:
             return pd.DataFrame()
 
         # Per-row search window (intersection of class span and requested range)
-        df["search_start"] = df["CLASS_START_DATE"].where(
-            df["CLASS_START_DATE"] > start_date, start_date
-        )
+        df["search_start"] = df["CLASS_START_DATE"].where(df["CLASS_START_DATE"] > start_date, start_date)
         df["search_end"] = df["CLASS_END_DATE"].where(df["CLASS_END_DATE"] < end_date, end_date)
 
         def parse_days(days_str: str) -> set[int]:
@@ -208,9 +204,7 @@ class DataLoader:
 
             # Normalize instructor IDs to match Zoom export normalization:
             #  - strip, numeric-only, then zero-pad to 9 digits.
-            filtered_df["INSTRUCTOR1_EMPLID"] = (
-                filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
-            )
+            filtered_df["INSTRUCTOR1_EMPLID"] = filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
             filtered_df = filtered_df[
                 filtered_df["INSTRUCTOR1_EMPLID"].str.replace(".", "", regex=False).str.isdigit()
             ]
@@ -219,7 +213,8 @@ class DataLoader:
             )
 
             log.debug(
-                f"{initial_rows - len(filtered_df)} rows initially cleansed. Initial size: {initial_rows}, Filtered size: {len(filtered_df)}"
+                f"{initial_rows - len(filtered_df)} rows initially cleansed. "
+                f"Initial size: {initial_rows}, Filtered size: {len(filtered_df)}"
             )
             return filtered_df
         except Exception as e:
@@ -239,9 +234,7 @@ class DataLoader:
 
             # Fallback: let pandas infer format for any rows that didn't parse
             if start.isna().any():
-                start_fallback = pd.to_datetime(
-                    df.loc[start.isna(), "CLASS_START_DATE"], errors="coerce"
-                )
+                start_fallback = pd.to_datetime(df.loc[start.isna(), "CLASS_START_DATE"], errors="coerce")
                 start.loc[start.isna()] = start_fallback
             if end.isna().any():
                 end_fallback = pd.to_datetime(df.loc[end.isna(), "CLASS_END_DATE"], errors="coerce")
@@ -280,9 +273,7 @@ class DataLoader:
             else:
                 log.warning(f"Multiple TERM values found: {df['TERM'].unique()}")
 
-            log.debug(
-                f"Filtered to current semester. Rows before: {before_rows}, Rows after: {len(df)}"
-            )
+            log.debug(f"Filtered to current semester. Rows before: {before_rows}, Rows after: {len(df)}")
             return df
         except Exception as e:
             raise_error_window(
@@ -300,9 +291,7 @@ class DataLoader:
             df["_location_tuple"] = list(zip(df["BUILDING"], df["ROOM"], strict=False))
             df = df[df["_location_tuple"].isin(supported_set)]
             df = df.drop(columns=["_location_tuple"])
-            log.debug(
-                f"Filtered to supported locations. Rows before: {initial_rows}, Rows after: {len(df)}"
-            )
+            log.debug(f"Filtered to supported locations. Rows before: {initial_rows}, Rows after: {len(df)}")
             return df
 
         except Exception as e:

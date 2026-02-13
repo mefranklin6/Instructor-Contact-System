@@ -938,7 +938,8 @@ Progress: {contacted}/{total_instructors}
                             weight=ft.FontWeight.W_600,
                         ),
                         ft.Text(
-                            "Optional: select a date range to filter classes. If not specified, defaults to current semester. Use {location} as a placeholder in the message.",
+                            "Optional: select a date range to filter classes. If not specified, "
+                            "defaults to current semester. Use {{location}} as a placeholder in the message.",
                             size=16,
                         ),
                         ft.Row([building_input, room_input], spacing=12, wrap=True),
