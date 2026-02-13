@@ -1,21 +1,15 @@
+"""Main application logic and Flet UI for the Instructor Contact System."""
+
+from datetime import date, datetime, time
 import json
 import logging as log
 import os
-from datetime import date, datetime, time
-from typing import Optional, cast
+from typing import cast
 
 import flet as ft
 import pandas as pd
 
-from src import aggregator as agg
-
-from messages_ import (
-    default_room_contact_message,
-    default_room_contact_subject,
-    default_semester_start_message,
-    default_semester_start_subject,
-)
-from src import email_sender
+from src import aggregator as agg, email_sender
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -23,6 +17,22 @@ log.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 log.info(f"Logging level set to {LOGGING_LEVEL}")
+
+try:
+    from messages_ import (
+        default_room_contact_message,
+        default_room_contact_subject,
+        default_semester_start_message,
+        default_semester_start_subject,
+    )
+except ImportError:
+    log.warning("Could not import messages.py module")
+    (
+        default_room_contact_message,
+        default_room_contact_subject,
+        default_semester_start_message,
+        default_semester_start_subject,
+    ) = "Set default values in messages.py"
 
 # Maximum number of failed recipients to display in error messages
 MAX_FAILED_DISPLAY = 50
@@ -52,15 +62,16 @@ log.info(f"Using schedule module: {SCHEDULE_MODULE}")
 DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
 
 if DEV_MODE:
-    log.warning(
-        "System is in Dev Mode. Emails will not be sent. Change by setting DEV_MODE in .env"
-    )
+    log.warning("System is in Dev Mode.Emails will not be sent. Change by setting DEV_MODE in .env")
 else:
     log.info("System is in production mode. Emails will be sent")
 
 
 class InstructorContactSystem:
+    """Main application class for the Instructor Contact System."""
+
     def __init__(self) -> None:
+        """Initialize the Instructor Contact System."""
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
@@ -92,16 +103,15 @@ class InstructorContactSystem:
                 slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
                 if not slp_csv:
                     raise FileNotFoundError(
-                        "No SUPPORTED_LOCATIONS_FILE_PATH Found. This is a required file for Chico mode"
+                        """No SUPPORTED_LOCATIONS_FILE_PATH Found. 
+                        This is a required file for Chico mode"""
                     )
                 parser = slp.SupportedLocationsParser(slp_csv)
                 self.supported_locations = parser.run()
 
             fl_file = os.getenv("FL_FILE_PATH")
             if not fl_file:
-                raise FileNotFoundError(
-                    "No FL_FILE_PATH found. This is a required file."
-                )
+                raise FileNotFoundError("No FL_FILE_PATH found. This is a required file.")
 
             df = pd.DataFrame()
             if fl_data_loader:  # appease
@@ -112,16 +122,14 @@ class InstructorContactSystem:
                 current_date = datetime.now()
                 df = self.loader.semester_data(current_date)
 
-            if not df.empty:
+            if df is not None and not df.empty:
                 self.aggregator = agg.Aggregator(df=df)
                 self.contact_by_instructor = self.aggregator.by_instructor()
                 self.contact_by_location = self.aggregator.by_location()
 
             zoom_file = os.getenv("ID_TO_EMAIL_FILE_PATH")
             if not zoom_file:
-                raise FileNotFoundError(
-                    "No ID_TO_EMAIL_FILE_PATH found. This is a required file."
-                )
+                raise FileNotFoundError("No ID_TO_EMAIL_FILE_PATH found. This is a required file.")
             if matcher:  # appease
                 self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
                 if not self.id_matcher:
@@ -131,7 +139,7 @@ class InstructorContactSystem:
 
             log.info("Data initialization successful")
         except Exception as e:
-            log.error(f"Error initializing data: {str(e)}")
+            log.error(f"Error initializing data: {e!s}")
             raise
 
     # ---------- Flet 0.80.x helpers ----------
@@ -144,9 +152,7 @@ class InstructorContactSystem:
         page.pop_dialog()
         page.update()
 
-    def _create_copyable_dialog(
-        self, page: ft.Page, title: str, content: str
-    ) -> ft.AlertDialog:
+    def _create_copyable_dialog(self, page: ft.Page, title: str, content: str) -> ft.AlertDialog:
         return ft.AlertDialog(
             title=ft.Text(title),
             content=ft.Container(
@@ -166,10 +172,11 @@ class InstructorContactSystem:
         )
 
     def in_docker(self) -> bool:
+        """Detect if the application is running inside a Docker container."""
         try:
             if os.path.exists("/.dockerenv"):
                 return True
-            with open("/proc/1/cgroup", "rt") as f:
+            with open("/proc/1/cgroup") as f:
                 return "docker" in f.read()
         except Exception:
             return False
@@ -185,7 +192,7 @@ class InstructorContactSystem:
         return [e for e in emails if not (e in seen or seen.add(e))]
 
     def _get_aggregated_data_for_date_range(
-        self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None
+        self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> tuple[dict, dict]:
         """Get aggregated data for a specific date range, or current semester if no range is provided."""
         try:
@@ -203,7 +210,7 @@ class InstructorContactSystem:
             temp_aggregator = agg.Aggregator(df=df)
             return temp_aggregator.by_instructor(), temp_aggregator.by_location()
         except Exception as e:
-            log.error(f"Error getting data for date range: {str(e)}")
+            log.error(f"Error getting data for date range: {e!s}")
             return {}, {}
 
     # ---------- App logic ----------
@@ -211,7 +218,7 @@ class InstructorContactSystem:
     def _load_contact_history(self):
         contact_file = self._get_contact_file_path()
         if os.path.exists(contact_file):
-            with open(contact_file, "r") as f:
+            with open(contact_file) as f:
                 self.contacted_instructors = json.load(f)
         else:
             self.contacted_instructors = {}
@@ -222,7 +229,7 @@ class InstructorContactSystem:
         if not os.path.exists(contact_file):
             return 0
         try:
-            with open(contact_file, "r") as f:
+            with open(contact_file) as f:
                 data = json.load(f)
             if isinstance(data, dict):
                 # Only count those with contact_type "start of semester"
@@ -264,9 +271,7 @@ class InstructorContactSystem:
             slp_file = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
 
             fl_mod_time = get_file_mod_time(fl_file) if fl_file else "Not configured"
-            zoom_mod_time = (
-                get_file_mod_time(zoom_file) if zoom_file else "Not configured"
-            )
+            zoom_mod_time = get_file_mod_time(zoom_file) if zoom_file else "Not configured"
             slp_mod_time = get_file_mod_time(slp_file) if slp_file else "Not configured"
 
             diagnostics = f"""Server Diagnostics Report
@@ -306,8 +311,8 @@ This is an automated test email from the Instructor Contact System.
 """
             return diagnostics
         except Exception as e:
-            log.error(f"Error gathering diagnostics: {str(e)}")
-            return f"Error gathering diagnostics: {str(e)}"
+            log.error(f"Error gathering diagnostics: {e!s}")
+            return f"Error gathering diagnostics: {e!s}"
 
     def _send_test_email(self, page: ft.Page, email: str):
         """Send a test email with diagnostic information."""
@@ -335,13 +340,11 @@ This is an automated test email from the Instructor Contact System.
                 log.info(f"DEV MODE: Would have sent test email to {email}")
                 log.info(f"Subject: {subject}")
                 log.info(f"Message:\n{message}")
-                self._show_snack(
-                    page, f"DEV MODE: Test email logged (not sent) for {email}"
-                )
+                self._show_snack(page, f"DEV MODE: Test email logged (not sent) for {email}")
 
         except Exception as e:
-            log.error(f"Error sending test email: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
+            log.error(f"Error sending test email: {e!s}")
+            self._show_snack(page, f"Error: {e!s}")
 
     def _on_save_file_result(self, page: ft.Page, e):
         """Handle the file picker result for saving contact history."""
@@ -349,7 +352,7 @@ This is an automated test email from the Instructor Contact System.
             if e.path:
                 contact_file = self._get_contact_file_path()
                 if os.path.exists(contact_file):
-                    with open(contact_file, "r") as source:
+                    with open(contact_file) as source:
                         data = source.read()
                     with open(e.path, "w") as dest:
                         dest.write(data)
@@ -358,8 +361,8 @@ This is an automated test email from the Instructor Contact System.
                 else:
                     self._show_snack(page, "No contact history file found")
         except Exception as ex:
-            log.error(f"Error saving contact history: {str(ex)}")
-            self._show_snack(page, f"Error saving file: {str(ex)}")
+            log.error(f"Error saving contact history: {ex!s}")
+            self._show_snack(page, f"Error saving file: {ex!s}")
 
     def _send_message_to_classroom(
         self,
@@ -368,7 +371,7 @@ This is an automated test email from the Instructor Contact System.
         room: str,
         subject: str,
         message_template: str,
-        location_map: Optional[dict] = None,
+        location_map: dict | None = None,
     ):
         try:
             location_key = f"{building.upper()} {room.upper()}"
@@ -392,9 +395,7 @@ This is an automated test email from the Instructor Contact System.
             emails = self._dedupe_emails(emails)
 
             if not emails:
-                self._show_snack(
-                    page, "No email matches found for instructors in this location"
-                )
+                self._show_snack(page, "No email matches found for instructors in this location")
                 return
 
             message = message_template.format(location=location_key)
@@ -411,11 +412,9 @@ This is an automated test email from the Instructor Contact System.
                     ok = False
                     try:
                         ok = bool(self.email_sender.send(email, subject, message))
-                        log.info(
-                            f"Sent: {email}, subject: {subject}, message: {message}"
-                        )
+                        log.info(f"Sent: {email}, subject: {subject}, message: {message}")
                     except Exception as e:
-                        log.error(f"Email send failed to {email}: {str(e)}")
+                        log.error(f"Email send failed to {email}: {e!s}")
 
                     if ok:
                         existing = self.contacted_instructors.get(email, {})
@@ -445,9 +444,7 @@ Failed: {len(failed)}
 """
 
             if failed:
-                summary += "\nFailed recipients:\n" + "\n".join(
-                    failed[:MAX_FAILED_DISPLAY]
-                )
+                summary += "\nFailed recipients:\n" + "\n".join(failed[:MAX_FAILED_DISPLAY])
                 if len(failed) > MAX_FAILED_DISPLAY:
                     summary += f"\n...and {len(failed) - MAX_FAILED_DISPLAY} more"
 
@@ -463,10 +460,10 @@ Failed: {len(failed)}
             page.update()
 
         except KeyError as ke:
-            self._show_snack(page, f"Missing placeholder in message: {str(ke)}")
+            self._show_snack(page, f"Missing placeholder in message: {ke!s}")
         except Exception as e:
-            log.error(f"Error sending classroom message: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
+            log.error(f"Error sending classroom message: {e!s}")
+            self._show_snack(page, f"Error: {e!s}")
 
     def _lookup_classroom(self, page: ft.Page, building: str, room: str):
         try:
@@ -484,9 +481,7 @@ Failed: {len(failed)}
             ]
 
             if not emails:
-                self._show_snack(
-                    page, "No email matches found for instructors in this location"
-                )
+                self._show_snack(page, "No email matches found for instructors in this location")
                 return
 
             dialog = self._create_copyable_dialog(
@@ -498,8 +493,8 @@ Failed: {len(failed)}
             page.update()
 
         except Exception as e:
-            log.error(f"Error looking up classroom: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
+            log.error(f"Error looking up classroom: {e!s}")
+            self._show_snack(page, f"Error: {e!s}")
 
     def _lookup_instructor(self, page: ft.Page, email: str):
         try:
@@ -523,12 +518,10 @@ Failed: {len(failed)}
             page.update()
 
         except Exception as e:
-            log.error(f"Error looking up instructor: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
+            log.error(f"Error looking up instructor: {e!s}")
+            self._show_snack(page, f"Error: {e!s}")
 
-    def _start_semester_deployment(
-        self, page: ft.Page, message_template: str, batch_size: int
-    ):
+    def _start_semester_deployment(self, page: ft.Page, message_template: str, batch_size: int):
         try:
             self._load_contact_history()
 
@@ -580,8 +573,8 @@ Message template includes instructor locations via {{locations}}.
             page.update()
 
         except Exception as e:
-            log.error(f"Error starting deployment: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
+            log.error(f"Error starting deployment: {e!s}")
+            self._show_snack(page, f"Error: {e!s}")
 
     def _execute_deployment(
         self, page: ft.Page, instructors: list, message_template: str, batch_size: int
@@ -603,22 +596,14 @@ Message template includes instructor locations via {{locations}}.
                     ok = False
                     if not DEV_MODE:
                         try:
-                            ok = bool(
-                                self.email_sender.send(
-                                    instructor["email"], subject, message
-                                )
-                            )
+                            ok = bool(self.email_sender.send(instructor["email"], subject, message))
                         except Exception as e:
-                            log.error(
-                                f"Email send failed to {instructor['email']}: {str(e)}"
-                            )
+                            log.error(f"Email send failed to {instructor['email']}: {e!s}")
                             failed.append(instructor["email"])
 
                     else:  # dev mode
                         ok = True
-                        log.info(
-                            f"DEV MODE: Would have sent email to {instructor['email']}"
-                        )
+                        log.info(f"DEV MODE: Would have sent email to {instructor['email']}")
                     if ok:
                         self.contacted_instructors[instructor["email"]] = {
                             "contacted_at": datetime.now().isoformat(),
@@ -655,9 +640,7 @@ Progress: {contacted}/{total_instructors}
 """
 
             if failed:
-                summary += "\nFailed recipients:\n" + "\n".join(
-                    failed[:MAX_FAILED_DISPLAY]
-                )
+                summary += "\nFailed recipients:\n" + "\n".join(failed[:MAX_FAILED_DISPLAY])
                 if len(failed) > MAX_FAILED_DISPLAY:
                     summary += f"\n...and {len(failed) - MAX_FAILED_DISPLAY} more"
 
@@ -673,12 +656,14 @@ Progress: {contacted}/{total_instructors}
             page.update()
 
         except Exception as e:
-            log.error(f"Error executing deployment: {str(e)}")
-            self._show_snack(page, f"Error: {str(e)}")
+            log.error(f"Error executing deployment: {e!s}")
+            self._show_snack(page, f"Error: {e!s}")
 
     # ---------- UI ----------
 
     def main(self, page: ft.Page):
+        """Build and display the main flet UI."""
+
         page.title = "Instructor Contact System"
         page.theme_mode = ft.ThemeMode.SYSTEM
         page.padding = 0
@@ -705,7 +690,7 @@ Progress: {contacted}/{total_instructors}
             )
 
             # Store selected date range (optional)
-            selected_dates: dict[str, Optional[ft.DateTimeValue]] = {
+            selected_dates: dict[str, ft.DateTimeValue | None] = {
                 "start": None,
                 "end": None,
             }
@@ -748,11 +733,11 @@ Progress: {contacted}/{total_instructors}
                 # In many builds, the final selection is committed on "Save" (dismiss),
                 # so read directly from the control's properties.
                 selected_dates["start"] = cast(
-                    Optional[ft.DateTimeValue],
+                    ft.DateTimeValue | None,
                     getattr(date_range_picker, "start_value", None),
                 )
                 selected_dates["end"] = cast(
-                    Optional[ft.DateTimeValue],
+                    ft.DateTimeValue | None,
                     getattr(date_range_picker, "end_value", None),
                 )
                 update_date_display()
@@ -786,7 +771,7 @@ Progress: {contacted}/{total_instructors}
                 prefix_icon=ft.Icons.MESSAGE,
             )
 
-            def _get_date_filtered_location_map() -> Optional[dict]:
+            def _get_date_filtered_location_map() -> dict | None:
                 start_dt = selected_dates["start"]
                 end_dt = selected_dates["end"]
 
@@ -806,9 +791,7 @@ Progress: {contacted}/{total_instructors}
 
                 # Validate date range
                 if _value_to_date(start_dt) > _value_to_date(end_dt):
-                    self._show_snack(
-                        page, "Start date must be before or equal to end date"
-                    )
+                    self._show_snack(page, "Start date must be before or equal to end date")
                     return None
 
                 # Convert to inclusive datetime bounds for the data loader
@@ -819,9 +802,7 @@ Progress: {contacted}/{total_instructors}
                 _, location_map = self._get_aggregated_data_for_date_range(
                     start_datetime, end_datetime
                 )
-                log.info(
-                    f"Filtered location map contains {len(location_map)} locations"
-                )
+                log.info(f"Filtered location map contains {len(location_map)} locations")
                 return location_map
 
             def on_search(e):
@@ -833,9 +814,7 @@ Progress: {contacted}/{total_instructors}
                 if location_map is None:
                     return
 
-                location_key = (
-                    f"{building_input.value.upper()} {room_input.value.upper()}"
-                )
+                location_key = f"{building_input.value.upper()} {room_input.value.upper()}"
                 if location_key not in location_map:
                     self._show_snack(page, f"No classes found in {location_key}")
                     return
@@ -876,9 +855,7 @@ Progress: {contacted}/{total_instructors}
                 if location_map is None:
                     return
 
-                location_key = (
-                    f"{building_input.value.upper()} {room_input.value.upper()}"
-                )
+                location_key = f"{building_input.value.upper()} {room_input.value.upper()}"
                 if location_key not in location_map:
                     self._show_snack(page, f"No classes found in {location_key}")
                     return
@@ -902,7 +879,7 @@ Progress: {contacted}/{total_instructors}
                 try:
                     rendered_message = message_input.value.format(location=location_key)
                 except KeyError as ke:
-                    self._show_snack(page, f"Missing placeholder in message: {str(ke)}")
+                    self._show_snack(page, f"Missing placeholder in message: {ke!s}")
                     return
 
                 recipients_text = "\n".join(emails)
@@ -1035,9 +1012,7 @@ Progress: {contacted}/{total_instructors}
                             weight=ft.FontWeight.W_600,
                         ),
                         email_input,
-                        ft.FilledButton(
-                            "Search", icon=ft.Icons.SEARCH, on_click=on_search
-                        ),
+                        ft.FilledButton("Search", icon=ft.Icons.SEARCH, on_click=on_search),
                     ],
                     spacing=16,
                 ),
@@ -1072,11 +1047,9 @@ Progress: {contacted}/{total_instructors}
                     batch_size = int(batch_size_input.value)
                     if batch_size <= 0:
                         raise ValueError("Batch size must be positive")
-                    self._start_semester_deployment(
-                        page, message_input.value, batch_size
-                    )
+                    self._start_semester_deployment(page, message_input.value, batch_size)
                 except ValueError as ve:
-                    self._show_snack(page, f"Invalid batch size: {str(ve)}")
+                    self._show_snack(page, f"Invalid batch size: {ve!s}")
 
             return ft.Container(
                 content=ft.Column(
@@ -1126,9 +1099,7 @@ Progress: {contacted}/{total_instructors}
                     )
                     return
 
-                save_path = await ft.FilePicker().save_file(
-                    file_name="contact_history.json"
-                )
+                save_path = await ft.FilePicker().save_file(file_name="contact_history.json")
                 if save_path:
                     with open(save_path, "wb") as f:
                         f.write(content_bytes)
@@ -1225,15 +1196,9 @@ Progress: {contacted}/{total_instructors}
         bar = ft.NavigationBar(
             selected_index=0,
             destinations=[
-                ft.NavigationBarDestination(
-                    icon=ft.Icons.MEETING_ROOM, label="Classroom"
-                ),
-                ft.NavigationBarDestination(
-                    icon=ft.Icons.PERSON_SEARCH, label="Instructor"
-                ),
-                ft.NavigationBarDestination(
-                    icon=ft.Icons.ROCKET_LAUNCH, label="Deploy"
-                ),
+                ft.NavigationBarDestination(icon=ft.Icons.MEETING_ROOM, label="Classroom"),
+                ft.NavigationBarDestination(icon=ft.Icons.PERSON_SEARCH, label="Instructor"),
+                ft.NavigationBarDestination(icon=ft.Icons.ROCKET_LAUNCH, label="Deploy"),
                 ft.NavigationBarDestination(icon=ft.Icons.BUILD, label="Utility"),
             ],
         )
@@ -1243,9 +1208,7 @@ Progress: {contacted}/{total_instructors}
             selected_index = index
             rail.selected_index = index
             bar.selected_index = index
-            content_host.content = views[
-                index
-            ]()  # rebuild view to keep controls fresh/simple
+            content_host.content = views[index]()  # rebuild view to keep controls fresh/simple
             page.update()
 
         def on_rail_change(e):
