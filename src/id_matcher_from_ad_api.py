@@ -136,10 +136,12 @@ class Matcher:
             str: The email address corresponding to the Employee ID, or an empty string if not found.
         """
         if id is None:
+            log.debug("Provided Employee ID is None, returning empty string")
             return ""
 
         id = str(id).strip()
         if not id:
+            log.debug("Provided Employee ID is empty after stripping, returning empty string")
             return ""
 
         # Check cached dictionary first (O(1) lookup)
@@ -147,7 +149,7 @@ class Matcher:
             log.debug(f"Cache hit for ID {id}")
             return self._id_to_email[id]
 
-        # If cache miss or not loaded, perform single query
+        # If cache miss, perform single query
         safe_id = id.replace('"', '""')
         log.debug(f"Cache miss for ID {id}, performing single AD query")
 
