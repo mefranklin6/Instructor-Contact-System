@@ -9,12 +9,7 @@ class Matcher:
     """Class to match Employee IDs to email addresses using Active Directory."""
 
     def __init__(self) -> None:
-        """Initialize the Matcher with PowerShell queries for Active Directory.
-
-        Args:
-            lazy_load: If True, delays loading AD data until first access.
-                      If False, loads all data immediately at initialization.
-        """
+        """Initialize the Matcher with PowerShell queries for Active Directory."""
 
         self.all_query = (
             "Get-ADUser -Filter 'Enabled -eq $true' "
