@@ -25,7 +25,7 @@ class Matcher:
         """
 
         self.csv_file_path = csv_file_path
-        self.id_to_email_map = self._load_mapping()
+        self.all_id_to_email_map = self._load_mapping()
 
     def _load_mapping(self) -> dict:
         """Load Employee ID to Email mapping from CSV file.
@@ -89,7 +89,7 @@ class Matcher:
         normalized = self._normalize_emp_id(emp_id)
         if not normalized:
             return ""
-        email = self.id_to_email_map.get(normalized, "")
+        email = self.all_id_to_email_map.get(normalized, "")
         if not email:
             log.warning("Could not match id %s to an email", normalized)
         return email
