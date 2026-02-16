@@ -6,6 +6,7 @@ import logging as log
 import os
 from typing import cast
 
+from dotenv import load_dotenv
 import flet as ft
 import pandas as pd
 
@@ -35,6 +36,22 @@ except ImportError:
     ) = "Set default values in messages.py"
 
 
+def in_docker() -> bool:
+    """Detect if the application is running inside a Docker container."""
+    try:
+        if os.path.exists("/.dockerenv"):
+            return True
+        with open("/proc/1/cgroup") as f:
+            return "docker" in f.read()
+    except Exception:
+        return False
+
+
+IN_DOCKER = in_docker()
+if not IN_DOCKER:
+    load_dotenv()
+    log.info("Loaded environment variables locally from .env file")
+
 SUPPORTED_LOCATIONS_MODE = os.getenv("SUPPORTED_LOCATIONS_MODE", "none").lower()
 if SUPPORTED_LOCATIONS_MODE == "chico":
     from src import chico_supported_location_parser as slp
@@ -42,19 +59,19 @@ else:
     slp = None
 log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS_MODE}")
 
-ID_TO_EMAIL_MODULE = os.getenv("ID_TO_EMAIL_MODULE", "none").lower()
-
-# Ensure these names always exist to avoid NameError
+ID_TO_EMAIL_MODULE = os.getenv("ID_TO_EMAIL_MODULE", "").lower()
 id_matcher_from_zoom_users = None
-id_matcher_from_ad = None
+id_matcher_from_ad_api = None
 
 match ID_TO_EMAIL_MODULE:
     case "zoom_csv":
         from src import id_matcher_from_zoom_users
-    case "ad":
-        from src import id_matcher_from_ad
+    case "ad_api":
+        if IN_DOCKER:
+            raise RuntimeError("Active Directory module is not supported while in Docker")
+        from src import id_matcher_from_ad_api
     case _:
-        log.error(f"Invalid ID_TO_EMAIL_MODULE: {ID_TO_EMAIL_MODULE}.")
+        raise ValueError(f"Invalid ID_TO_EMAIL_MODULE: {ID_TO_EMAIL_MODULE}. Must be 'zoom_csv' or 'ad'.")
 
 log.info(f"Using ID to email module: {ID_TO_EMAIL_MODULE}")
 
@@ -64,8 +81,7 @@ match SCHEDULE_MODULE:
     case "fl_csv":
         from src import fl_aggregator as agg, fl_data_loader as schedule
     case _:
-        log.error(f"Invalid SCHEDULE_MODULE: {SCHEDULE_MODULE}.")
-        schedule, agg = None, None
+        raise ValueError(f"Invalid SCHEDULE_MODULE: {SCHEDULE_MODULE}. Must be 'fl_csv'.")
 
 log.info(f"Using schedule module: {SCHEDULE_MODULE}")
 
@@ -96,8 +112,7 @@ class InstructorContactSystem:
         self._clipboard = None
         self._deployment_already_contacted_text = None
 
-        self.is_in_docker: bool = self.in_docker()
-        if self.is_in_docker:
+        if IN_DOCKER:
             log.info("Running in Docker")
             # Ensure data directory exists for persistent storage
             data_dir = "/data"
@@ -159,10 +174,10 @@ class InstructorContactSystem:
 
                 self.id_matcher = id_matcher_from_zoom_users.Matcher(csv_file_path=zoom_file)
 
-            elif ID_TO_EMAIL_MODULE == "ad":
-                if not id_matcher_from_ad:
+            elif ID_TO_EMAIL_MODULE == "ad_api":
+                if not id_matcher_from_ad_api:
                     raise ValueError("ID Matcher module not found or invalid configuration")
-                self.id_matcher = id_matcher_from_ad.Matcher()
+                self.id_matcher = id_matcher_from_ad_api.Matcher()
 
             else:
                 raise ValueError(f"Invalid ID_TO_EMAIL_MODULE configuration: {ID_TO_EMAIL_MODULE}")
@@ -204,18 +219,8 @@ class InstructorContactSystem:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-    def in_docker(self) -> bool:
-        """Detect if the application is running inside a Docker container."""
-        try:
-            if os.path.exists("/.dockerenv"):
-                return True
-            with open("/proc/1/cgroup") as f:
-                return "docker" in f.read()
-        except Exception:
-            return False
-
     def _get_contact_file_path(self) -> str:
-        if self.is_in_docker:
+        if IN_DOCKER:
             return "/data/contact_history.json"
         return "contact_history.json"
 
@@ -316,7 +321,7 @@ Generated: {datetime.now().isoformat()}
 System Information:
 - Platform: {platform.system()} {platform.release()}
 - Python Version: {sys.version}
-- Running in Docker: {self.is_in_docker}
+- Running in Docker: {IN_DOCKER}
 
 Application Status:
 - DEV_MODE: {DEV_MODE}
@@ -560,6 +565,39 @@ Failed: {len(failed)}
     def _start_semester_deployment(self, page: ft.Page, message_template: str, batch_size: int):
         try:
             self._load_contact_history()
+
+            if (
+                batch_size > 15
+                and ID_TO_EMAIL_MODULE == "ad_api"
+                and hasattr(self.id_matcher, "load_all_id_and_email_map")
+            ):
+                # Show loading dialog
+                loading_dialog = ft.AlertDialog(
+                    title=ft.Text("Loading Data"),
+                    content=ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.ProgressRing(),
+                                ft.Text(
+                                    "Loading Employee IDs from Active Directory...\nThis may take a minute."
+                                ),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=20,
+                        ),
+                        padding=ft.Padding.all(20),
+                    ),
+                    modal=True,
+                )
+                page.show_dialog(loading_dialog)
+                page.update()
+
+                # Pre-load all data for better performance
+                self.id_matcher.load_all_id_and_email_map()  # type: ignore
+
+                # Close loading dialog
+                page.pop_dialog()
+                page.update()
 
             all_instructors = []
             for emp_id in self.contact_by_instructor:
@@ -1287,5 +1325,13 @@ Progress: {contacted}/{total_instructors}
 
 
 if __name__ == "__main__":
-    app = InstructorContactSystem()
-    ft.run(app.main, port=8080, view=ft.AppView.WEB_BROWSER)
+    try:
+        app = InstructorContactSystem()
+        ft.run(app.main, port=8080, view=ft.AppView.WEB_BROWSER)
+    except Exception as e:
+        log.error(f"Fatal error starting app: {e!s}")
+        if not IN_DOCKER:
+            from time import sleep
+
+            sleep(15)  # Allow time to see the error in the console before it closes
+        exit(1)
