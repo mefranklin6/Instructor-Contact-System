@@ -64,12 +64,19 @@ This system is designed to be modular, but was built with Chico State's tech sta
 
 ### Calendar Data (required)
 
+Options:
+
 - The CSV that is exported from PeopleSoft and ingested by MetaBIM Facilities Link
 
 ### Employee ID to Email key (required)
 
-- The CSV Users Report from Zoom Admin center
-- Future: Zoom API
+Options:
+
+- **Zoom CSV**: The CSV Users Report from Zoom Admin center
+
+- **Active Directory API**: Live queries AD for the ID to Email keys. Note: Is not compatible with running in Docker. Must run on a domain-joined workstation with proper privileges and RSAT.
+
+- Future: Zoom API, ldap3 AD querying
 
 ### Supported Locations (for now, Chico only and fully optional)
 
@@ -89,9 +96,19 @@ This system is designed to be modular, but was built with Chico State's tech sta
 
 4. Make a file called `messages.py` in the root of the repository. Copy the `messages.py.example` contents into it and change the settings as needed.
 
-5. `cd` to your repository root and run `docker compose up`
+5. Configure your Employee ID to Email mapping method:
+   - **Option A: Zoom CSV** - Set `ID_TO_EMAIL_MODULE=zoom_csv` and provide the Zoom users CSV file path
+   - **Option B: Active Directory LDAP** - Set `ID_TO_EMAIL_MODULE=ad_api` (not Docker compatible)
 
-6. The webserver is at `http://<your_address_or_localhost>:8080`
+6. `cd` to your repository root and run `docker compose up`.
+      Alternatively, you can run locally if you have Python installed.
+
+      ```pwsh
+      pip install requirements.txt
+      ./main.py
+      ```
+
+The webserver will be at `http://<your_address_or_localhost>:8080`
 
 ## Contributing
 
