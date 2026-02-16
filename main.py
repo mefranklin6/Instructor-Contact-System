@@ -9,7 +9,7 @@ from typing import cast
 import flet as ft
 import pandas as pd
 
-from src import aggregator as agg, email_sender
+from src import email_sender
 
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
@@ -34,8 +34,6 @@ except ImportError:
         default_semester_start_subject,
     ) = "Set default values in messages.py"
 
-# Maximum number of failed recipients to display in error messages
-MAX_FAILED_DISPLAY = 50
 
 SUPPORTED_LOCATIONS_MODE = os.getenv("SUPPORTED_LOCATIONS_MODE", "none").lower()
 if SUPPORTED_LOCATIONS_MODE == "chico":
@@ -45,17 +43,30 @@ else:
 log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS_MODE}")
 
 ID_TO_EMAIL_MODULE = os.getenv("ID_TO_EMAIL_MODULE", "none").lower()
-if ID_TO_EMAIL_MODULE == "zoom_csv":
-    from src import id_matcher_from_zoom_users as matcher
-else:
-    matcher = None
+
+# Ensure these names always exist to avoid NameError
+id_matcher_from_zoom_users = None
+id_matcher_from_ad = None
+
+match ID_TO_EMAIL_MODULE:
+    case "zoom_csv":
+        from src import id_matcher_from_zoom_users
+    case "ad":
+        from src import id_matcher_from_ad
+    case _:
+        log.error(f"Invalid ID_TO_EMAIL_MODULE: {ID_TO_EMAIL_MODULE}.")
+
 log.info(f"Using ID to email module: {ID_TO_EMAIL_MODULE}")
 
 SCHEDULE_MODULE = os.getenv("SCHEDULE_MODULE", "none").lower()
-if SCHEDULE_MODULE == "fl_csv":
-    from src import fl_data_loader
-else:
-    fl_data_loader = None
+
+match SCHEDULE_MODULE:
+    case "fl_csv":
+        from src import fl_aggregator as agg, fl_data_loader as schedule
+    case _:
+        log.error(f"Invalid SCHEDULE_MODULE: {SCHEDULE_MODULE}.")
+        schedule, agg = None, None
+
 log.info(f"Using schedule module: {SCHEDULE_MODULE}")
 
 # If True, disables the actual sending of emails.
@@ -66,6 +77,9 @@ if DEV_MODE:
 else:
     log.info("System is in production mode. Emails will be sent")
 
+# Maximum number of failed recipients to display in error messages
+MAX_FAILED_DISPLAY = 50
+
 
 class InstructorContactSystem:
     """Main application class for the Instructor Contact System."""
@@ -75,8 +89,7 @@ class InstructorContactSystem:
         self.supported_locations = None
         self.loader = None
         self.aggregator = None
-        # self.id_matcher = None # appease type checker; will be set in _initialize_data
-        self.email_sender = None
+        # self.id_matcher =
         self.contact_by_instructor = {}
         self.contact_by_location = {}
         self.contacted_instructors = {}
@@ -99,6 +112,7 @@ class InstructorContactSystem:
     def _initialize_data(self) -> None:
         """Initialize data loaders and aggregators."""
         try:
+            # Optional: Supported Locations Module
             if slp and SUPPORTED_LOCATIONS_MODE == "chico":
                 slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
                 if not slp_csv:
@@ -109,32 +123,51 @@ class InstructorContactSystem:
                 parser = slp.SupportedLocationsParser(slp_csv)
                 self.supported_locations = parser.run()
 
-            fl_file = os.getenv("FL_FILE_PATH")
-            if not fl_file:
-                raise FileNotFoundError("No FL_FILE_PATH found. This is a required file.")
-
             df = pd.DataFrame()
-            if fl_data_loader:  # appease
-                self.loader = fl_data_loader.DataLoader(
+
+            # Schedule Module
+            if not schedule:
+                log.error("No valid schedule module configured, cannot load schedule data")
+                raise ValueError("Invalid SCHEDULE_MODULE configuration")
+            if SCHEDULE_MODULE == "fl_csv":
+                fl_file = os.getenv("FL_FILE_PATH")
+                if not fl_file:
+                    raise FileNotFoundError("""No FL_FILE_PATH found. 
+                    This is a required file for fl_csv mode""")
+
+                self.loader = schedule.DataLoader(
                     fl_file_path=fl_file,
                     supported_locations=self.supported_locations,
                 )
                 current_date = datetime.now()
                 df = self.loader.semester_data(current_date)
 
-            if df is not None and not df.empty:
+            # Aggregator
+            if df is not None and not df.empty and agg:
                 self.aggregator = agg.Aggregator(df=df)
                 self.contact_by_instructor = self.aggregator.by_instructor()
                 self.contact_by_location = self.aggregator.by_location()
 
-            zoom_file = os.getenv("ID_TO_EMAIL_FILE_PATH")
-            if not zoom_file:
-                raise FileNotFoundError("No ID_TO_EMAIL_FILE_PATH found. This is a required file.")
-            if matcher:  # appease
-                self.id_matcher = matcher.Matcher(csv_file_path=zoom_file)
-                if not self.id_matcher:
-                    raise ValueError("ID Matcher failed to initialize")
+            # ID to Email Address Mapper
+            if ID_TO_EMAIL_MODULE == "zoom_csv":
+                if not id_matcher_from_zoom_users:
+                    raise ValueError("ID Matcher module not found or invalid configuration")
+                zoom_file = os.getenv("ZOOM_CSV_PATH")
+                if not zoom_file:
+                    raise FileNotFoundError("""No ZOOM_CSV_PATH found. 
+                                            This is a required file for Zoom CSV mode""")
 
+                self.id_matcher = id_matcher_from_zoom_users.Matcher(csv_file_path=zoom_file)
+
+            elif ID_TO_EMAIL_MODULE == "ad":
+                if not id_matcher_from_ad:
+                    raise ValueError("ID Matcher module not found or invalid configuration")
+                self.id_matcher = id_matcher_from_ad.Matcher()
+
+            else:
+                raise ValueError(f"Invalid ID_TO_EMAIL_MODULE configuration: {ID_TO_EMAIL_MODULE}")
+
+            # Emails (universal)
             self.email_sender = email_sender.EmailSender()
 
             log.info("Data initialization successful")
@@ -204,6 +237,10 @@ class InstructorContactSystem:
             else:
                 df = self.loader.semester_data(datetime.now())
 
+            if not agg:
+                log.error("Aggregator module is not configured")
+                return {}, {}
+
             if df is None or df.empty:
                 return {}, {}
 
@@ -234,9 +271,7 @@ class InstructorContactSystem:
             if isinstance(data, dict):
                 # Only count those with contact_type "start of semester"
                 count = sum(
-                    1
-                    for email, info in data.items()
-                    if info.get("contact_type") == "start of semester"
+                    1 for email, info in data.items() if info.get("contact_type") == "start of semester"
                 )
                 return count
             return 0
@@ -255,6 +290,7 @@ class InstructorContactSystem:
 
     def _get_server_diagnostics(self) -> str:
         """Gather server diagnostic information."""
+        return ""
         try:
             import platform
             import sys
@@ -576,9 +612,7 @@ Message template includes instructor locations via {{locations}}.
             log.error(f"Error starting deployment: {e!s}")
             self._show_snack(page, f"Error: {e!s}")
 
-    def _execute_deployment(
-        self, page: ft.Page, instructors: list, message_template: str, batch_size: int
-    ):
+    def _execute_deployment(self, page: ft.Page, instructors: list, message_template: str, batch_size: int):
         try:
             batch_count = 0
             failed = []
@@ -623,9 +657,7 @@ Message template includes instructor locations via {{locations}}.
 
             contacted = len(self.contacted_instructors)
             total_instructors = sum(
-                1
-                for emp_id in self.contact_by_instructor
-                if self.id_matcher.match_id_to_email(emp_id)
+                1 for emp_id in self.contact_by_instructor if self.id_matcher.match_id_to_email(emp_id)
             )
             remaining = total_instructors - contacted
 
@@ -799,9 +831,7 @@ Progress: {contacted}/{total_instructors}
                 end_datetime = datetime.combine(_value_to_date(end_dt), time.max)
 
                 log.info(f"Using date range filter: {start_datetime} to {end_datetime}")
-                _, location_map = self._get_aggregated_data_for_date_range(
-                    start_datetime, end_datetime
-                )
+                _, location_map = self._get_aggregated_data_for_date_range(start_datetime, end_datetime)
                 log.info(f"Filtered location map contains {len(location_map)} locations")
                 return location_map
 
@@ -827,9 +857,7 @@ Progress: {contacted}/{total_instructors}
                 ]
 
                 if not emails:
-                    self._show_snack(
-                        page, "No email matches found for instructors in this location"
-                    )
+                    self._show_snack(page, "No email matches found for instructors in this location")
                     return
 
                 dialog = self._create_copyable_dialog(
