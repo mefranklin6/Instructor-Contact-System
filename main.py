@@ -566,39 +566,6 @@ Failed: {len(failed)}
         try:
             self._load_contact_history()
 
-            if (
-                batch_size > 15
-                and ID_TO_EMAIL_MODULE == "ad_api"
-                and hasattr(self.id_matcher, "load_all_id_and_email_map")
-            ):
-                # Show loading dialog
-                loading_dialog = ft.AlertDialog(
-                    title=ft.Text("Loading Data"),
-                    content=ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.ProgressRing(),
-                                ft.Text(
-                                    "Loading Employee IDs from Active Directory...\nThis may take a minute."
-                                ),
-                            ],
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                            spacing=20,
-                        ),
-                        padding=ft.Padding.all(20),
-                    ),
-                    modal=True,
-                )
-                page.show_dialog(loading_dialog)
-                page.update()
-
-                # Pre-load all data for better performance
-                self.id_matcher.load_all_id_and_email_map()  # type: ignore
-
-                # Close loading dialog
-                page.pop_dialog()
-                page.update()
-
             all_instructors = []
             for emp_id in self.contact_by_instructor:
                 email = self.id_matcher.match_id_to_email(emp_id)
@@ -796,6 +763,12 @@ Progress: {contacted}/{total_instructors}
             def clear_date_range(e):
                 selected_dates["start"] = None
                 selected_dates["end"] = None
+                # Keep the picker state in sync with the UI state
+                try:
+                    date_range_picker.start_value = None
+                    date_range_picker.end_value = None
+                except Exception:
+                    pass
                 update_date_display()
                 page.update()
 
@@ -813,12 +786,10 @@ Progress: {contacted}/{total_instructors}
                 update_date_display()
                 page.update()
 
-            # ---- Date range picker (single control) ----
-            date_range_picker = ft.DateRangePicker(
-                on_change=lambda e: sync_date_range_from_picker(),
-                on_dismiss=lambda e: sync_date_range_from_picker(),
-            )
-            page.overlay.append(date_range_picker)
+            # ---- Date range picker (single shared overlay control) ----
+            date_range_picker = classroom_date_range_picker
+            date_range_picker.on_change = lambda e: sync_date_range_from_picker()
+            date_range_picker.on_dismiss = lambda e: sync_date_range_from_picker()
 
             def open_date_range_picker(e):
                 date_range_picker.open = True
@@ -1005,7 +976,7 @@ Progress: {contacted}/{total_instructors}
                         ),
                         ft.Text(
                             "Optional: select a date range to filter classes. If not specified, "
-                            "defaults to current semester. Use {{location}} as a placeholder in the message.",
+                            "defaults to current semester. Use {location} as a placeholder in the message.",
                             size=16,
                         ),
                         ft.Row([building_input, room_input], spacing=12, wrap=True),
@@ -1218,6 +1189,16 @@ Progress: {contacted}/{total_instructors}
                 ),
                 padding=16,
             )
+
+        # ---- Initialize shared UI components (overlays) once ----
+        # DateRangePicker for classroom view - create once to avoid Windows serialization issues
+        # On Windows, Flet/msgpack may attempt to timezone-convert default min/max datetimes
+        # which can raise OSError: [Errno 22] Invalid argument. Constrain to a safe range.
+        classroom_date_range_picker = ft.DateRangePicker(
+            first_date=date(2000, 1, 1),
+            last_date=date(2100, 12, 31),
+        )
+        page.overlay.append(classroom_date_range_picker)
 
         views = [
             build_view_by_classroom,
