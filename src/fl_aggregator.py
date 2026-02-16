@@ -22,10 +22,7 @@ class Aggregator:
         # Create a combined building_room column
         df = self.df.copy()
         df["building_room"] = (
-            df["BUILDING"]
-            .fillna("")
-            .astype(str)
-            .str.cat(df["ROOM"].fillna("").astype(str), sep=" ")
+            df["BUILDING"].fillna("").astype(str).str.cat(df["ROOM"].fillna("").astype(str), sep=" ")
         )
 
         # Group by INSTRUCTOR1_EMPLID and get unique building_room values
@@ -44,10 +41,7 @@ class Aggregator:
         # Create a combined building_room column
         df = self.df.copy()
         df["building_room"] = (
-            df["BUILDING"]
-            .fillna("")
-            .astype(str)
-            .str.cat(df["ROOM"].fillna("").astype(str), sep=" ")
+            df["BUILDING"].fillna("").astype(str).str.cat(df["ROOM"].fillna("").astype(str), sep=" ")
         )
 
         # Group by building_room and get unique INSTRUCTOR1_EMPLID values
