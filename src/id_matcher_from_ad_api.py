@@ -8,7 +8,7 @@ import subprocess
 class Matcher:
     """Class to match Employee IDs to email addresses using Active Directory."""
 
-    def __init__(self, lazy_load: bool = True) -> None:
+    def __init__(self) -> None:
         """Initialize the Matcher with PowerShell queries for Active Directory.
 
         Args:
@@ -36,9 +36,8 @@ class Matcher:
 
         self._id_to_email: dict[str, str] | None = None
 
-        if not lazy_load:
-            # Eagerly load data at initialization
-            self.load_all_id_and_email_map()
+        # This will take some time but it's worth getting it out of the way now.
+        self._load_all_id_and_email_map()
 
     @property
     def id_to_email_map(self) -> dict[str, str]:
@@ -51,7 +50,7 @@ class Matcher:
         """
         if self._id_to_email is None:
             log.info("ID to email mapping not loaded yet, loading from Active Directory...")
-            self.load_all_id_and_email_map()
+            self._load_all_id_and_email_map()
         return self._id_to_email or {}
 
     def _pwsh_query(self, query: str, return_type: str) -> list | str:
@@ -106,7 +105,7 @@ class Matcher:
 
         return result.stdout.strip()
 
-    def load_all_id_and_email_map(self) -> None:
+    def _load_all_id_and_email_map(self) -> None:
         """Query Active Directory for all Employee IDs and their corresponding email addresses.
 
         Stores the results as a dictionary for O(1) lookup performance.
@@ -169,14 +168,3 @@ class Matcher:
 
         log.warning(f"No email found for Employee ID: {id}")
         return ""
-
-
-if __name__ == "__main__":
-    # Example 1: Lazy loading (default) - data loaded on first access
-    matcher = Matcher()
-    print("Matcher initialized with lazy loading")
-    print(f"Email for 004755830: {matcher.match_id_to_email('004755830')}")
-
-    # Example 2: Eager loading - loads all data at initialization
-    # matcher = Matcher(lazy_load=False)
-    # print(f"Loaded {len(matcher.id_to_email_map)} mappings at initialization")
