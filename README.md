@@ -110,6 +110,38 @@ Options:
 
 The webserver will be at `http://<your_address_or_localhost>:8080`
 
+## Environmental Variables and Configuration
+
+Details about the .env file
+
+```bash
+# ---- SMTP Configuration ----
+SMTP_HOST= # your email / exchange server
+SMTP_PORT= # default: 587
+SMTP_FROM= # email addr you are sending from
+SMTP_USERNAME= # optional
+SMTP_PASSWORD= # optional
+
+# ---- Logging ----
+LOGGING_LEVEL= # See python logging documentation for levels
+
+# ---- Developer Settings ----
+DEV_MODE= # If True, no emails will actually be sent, but they will be logged
+
+# ---- Supported Locations Module ----
+SUPPORTED_LOCATIONS_MODE= # Options are: Chico
+SUPPORTED_LOCATIONS_FILE_PATH= # if in mode Chico, the CSV path from SL Sharepoint export
+
+# ---- ID to Email Module ----
+ID_TO_EMAIL_MODULE= # Options: zoom_csv or ad_api
+ZOOM_CSV_PATH= # If above is zoom_csv, path to the users export 
+
+# ---- Schedule Data Module ----
+SCHEDULE_MODULE= # Options are fl_csv for the FacilitiesLink ingest report
+FL_FILE_PATH= # If above is 'fl_csv', the path to the CSV
+
+```
+
 ## Contributing
 
 1. Make a branch of the project under your own Github account
