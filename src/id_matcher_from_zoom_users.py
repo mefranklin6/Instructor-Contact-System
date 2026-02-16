@@ -9,7 +9,7 @@ import pandas as pd
 class Matcher:
     """This module is designed to take the Zoom Users exported report.
 
-    You can export that report from
+    You can export that report from Zoom Admin center.
 
     The local path to this file is param 'csv_file_path'.
 
@@ -78,7 +78,14 @@ class Matcher:
         return s.zfill(9)
 
     def match_id_to_email(self, emp_id: str) -> str:
-        """Match a single Employee ID to an email."""
+        """Match a single Employee ID to an email.
+
+        Args:
+            emp_id: The Employee ID to look up.
+
+        Returns:
+            The email address corresponding to the Employee ID, or an empty string if not found.
+        """
         normalized = self._normalize_emp_id(emp_id)
         if not normalized:
             return ""
