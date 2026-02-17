@@ -62,6 +62,7 @@ log.info(f"Using supported locations mode: {SUPPORTED_LOCATIONS_MODE}")
 ID_TO_EMAIL_MODULE = os.getenv("ID_TO_EMAIL_MODULE", "").lower()
 id_matcher_from_zoom_users = None
 id_matcher_from_ad_api = None
+id_matcher_from_ad_json = None
 
 match ID_TO_EMAIL_MODULE:
     case "zoom_csv":
@@ -70,8 +71,12 @@ match ID_TO_EMAIL_MODULE:
         if IN_DOCKER:
             raise RuntimeError("Active Directory module is not supported while in Docker")
         from src import id_matcher_from_ad_api
+    case "ad_json":
+        from src import id_matcher_from_ad_json
     case _:
-        raise ValueError(f"Invalid ID_TO_EMAIL_MODULE: {ID_TO_EMAIL_MODULE}. Must be 'zoom_csv' or 'ad'.")
+        raise ValueError(
+            f"Invalid ID_TO_EMAIL_MODULE: {ID_TO_EMAIL_MODULE}. Must be 'zoom_csv', 'ad_api', or 'ad_json'."
+        )
 
 log.info(f"Using ID to email module: {ID_TO_EMAIL_MODULE}")
 
@@ -157,6 +162,9 @@ class InstructorContactSystem:
                 if not os.path.exists("id_and_emails_from_ad.json"):
                     raise FileNotFoundError("""No id_and_emails_from_ad.json found. 
                     Please run scripts/query_ad.ps1 first to generate this file""")
+                if not id_matcher_from_ad_json:
+                    raise ValueError("ID Matcher module not found or invalid configuration")
+                self.id_matcher = id_matcher_from_ad_json.Matcher()
 
             case _:
                 raise ValueError(f"Invalid ID_TO_EMAIL_MODULE configuration: {ID_TO_EMAIL_MODULE}")
@@ -188,11 +196,12 @@ class InstructorContactSystem:
             )
 
     def _initialize_aggregator_module(self):
-        # Aggregator
         if self.df is not None and not self.df.empty:
             self.aggregator = agg.Aggregator(df=self.df)
             self.contact_by_instructor = self.aggregator.by_instructor()
             self.contact_by_location = self.aggregator.by_location()
+        else:
+            raise FileNotFoundError("Could not initialize aggregator module. self.df is empty or missing")
 
     def _initialize_data(self) -> None:
         """Initialize data loaders and aggregators."""
@@ -216,6 +225,8 @@ class InstructorContactSystem:
         if df is None:
             raise ValueError("semester_data returned None; cannot continue without schedule data")
         self.df = df
+
+        self._initialize_aggregator_module()
 
         log.info("Data initialization successful")
 
@@ -264,24 +275,23 @@ class InstructorContactSystem:
         """Get aggregated data for a specific date range, or current semester if no range is provided."""
         try:
             if not self.loader:  # appease
-                log.error("Data loader is not initialized")
-                return {}, {}
+                raise ModuleNotFoundError("Data loader module is not configured")
+
             if start_date is not None and end_date is not None:
                 df = self.loader.range_data(start_date, end_date)
             else:
                 df = self.loader.semester_data(datetime.now())
 
             if not agg:
-                log.error("Aggregator module is not configured")
-                return {}, {}
+                raise ModuleNotFoundError("Aggregator module is not configured")
 
             if df is None or df.empty:
-                return {}, {}
+                raise ValueError("No data available for the specified date range")
 
             temp_aggregator = agg.Aggregator(df=df)
             return temp_aggregator.by_instructor(), temp_aggregator.by_location()
         except Exception as e:
-            log.error(f"Error getting data for date range: {e!s}")
+            log.error(f"Error getting data for date range: {e}")
             return {}, {}
 
     # ---------- App logic ----------
@@ -320,28 +330,60 @@ class InstructorContactSystem:
 
     def _get_server_diagnostics(self) -> str:
         """Gather server diagnostic information."""
-        return ""
         try:
             import platform
             import sys
 
-            # Get file modification times
-            def get_file_mod_time(file_path):
-                if file_path and os.path.exists(file_path):
-                    mod_time = os.path.getmtime(file_path)
-                    return datetime.fromtimestamp(mod_time).isoformat()
-                return "File not found"
+            def get_file_mod_time(file_path: str | None) -> str:
+                if not file_path:
+                    return "Not configured"
+                if not os.path.exists(file_path):
+                    return "File not found"
+                mod_time = os.path.getmtime(file_path)
+                return datetime.fromtimestamp(mod_time).isoformat()
 
-            fl_file = os.getenv("FL_FILE_PATH")
-            zoom_file = os.getenv("ID_TO_EMAIL_FILE_PATH")
-            slp_file = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
+            generated = datetime.now().isoformat()
 
-            fl_mod_time = get_file_mod_time(fl_file) if fl_file else "Not configured"
-            zoom_mod_time = get_file_mod_time(zoom_file) if zoom_file else "Not configured"
-            slp_mod_time = get_file_mod_time(slp_file) if slp_file else "Not configured"
+            # --- Mode-dependent file paths ---
+            schedule_file_path: str | None = None
+            if SCHEDULE_MODULE == "fl_csv":
+                schedule_file_path = os.getenv("FL_FILE_PATH")
 
+            id_to_email_file_path: str | None = None
+            match ID_TO_EMAIL_MODULE:
+                case "zoom_csv":
+                    id_to_email_file_path = os.getenv("ZOOM_CSV_PATH")
+                case "ad_json":
+                    # This is the file generated by scripts/query_ad.ps1 in this repo.
+                    id_to_email_file_path = "id_and_emails_from_ad.json"
+                case "ad_api":
+                    id_to_email_file_path = None
+                case _:
+                    id_to_email_file_path = None
+
+            supported_locations_file_path: str | None = None
+            if SUPPORTED_LOCATIONS_MODE == "chico":
+                supported_locations_file_path = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
+
+            # --- Module/load status ---
+            supported_locations_loaded = bool(self.supported_locations)
+            loader_loaded = self.loader is not None
+            aggregator_loaded = self.aggregator is not None
+
+            id_matcher_loaded = self.id_matcher is not None
+            email_sender_loaded = self.email_sender is not None
+
+            # Imported module references (globals)
+            schedule_module_loaded = bool(schedule)
+            aggregator_module_loaded = bool(agg)
+            slp_module_loaded = slp is not None
+            id_zoom_module_loaded = id_matcher_from_zoom_users is not None
+            id_ad_api_module_loaded = id_matcher_from_ad_api is not None
+            id_ad_json_module_loaded = id_matcher_from_ad_json is not None
+
+            # --- Render ---
             diagnostics = f"""Server Diagnostics Report
-Generated: {datetime.now().isoformat()}
+Generated: {generated}
 
 System Information:
 - Platform: {platform.system()} {platform.release()}
@@ -351,30 +393,60 @@ System Information:
 Application Status:
 - DEV_MODE: {DEV_MODE}
 - Logging Level: {LOGGING_LEVEL}
+
+Configured Modes:
 - Supported Locations Mode: {SUPPORTED_LOCATIONS_MODE}
 - ID to Email Mode: {ID_TO_EMAIL_MODULE}
 - Schedule Module: {SCHEDULE_MODULE}
 
+Loaded Components:
+- Email Sender: {email_sender_loaded}
+- ID Matcher: {id_matcher_loaded}
+- Supported Locations Data: {supported_locations_loaded}
+- Schedule Loader: {loader_loaded}
+- Aggregator: {aggregator_loaded}
+
+Imported Modules:
+- Schedule Module Imported: {schedule_module_loaded}
+- Aggregator Module Imported: {aggregator_module_loaded}
+- Supported Locations Parser Imported: {slp_module_loaded}
+- ID Matcher (zoom_csv) Imported: {id_zoom_module_loaded}
+- ID Matcher (ad_api) Imported: {id_ad_api_module_loaded}
+- ID Matcher (ad_json) Imported: {id_ad_json_module_loaded}
+
 Data Status:
 - Total Instructors: {len(self.contact_by_instructor)}
 - Total Locations: {len(self.contact_by_location)}
-- Contacted Instructors: {self._get_already_contacted_count()}
-- Email Sender Configured: {self.email_sender is not None}
-- ID Matcher Configured: {self.id_matcher is not None}
+- Contacted Instructors (start of semester): {self._get_already_contacted_count()}
 
-File Paths:
-- Contact History: {self._get_contact_file_path()}
-- FL File Path: {fl_file or "Not configured"}
-- Zoom File Path: {zoom_file or "Not configured"}
-- Supported Locations File: {slp_file or "Not configured"}
-
-File Modification Dates:
-- FL File: {fl_mod_time}
-- Zoom File: {zoom_mod_time}
-- Supported Locations File: {slp_mod_time}
-
-This is an automated test email from the Instructor Contact System.
+Files:
+- Contact History: {self._get_contact_file_path()} ({get_file_mod_time(self._get_contact_file_path())})
 """
+
+            if schedule_file_path is not None or SCHEDULE_MODULE == "fl_csv":
+                diagnostics += (
+                    f"- Schedule File (FL): {schedule_file_path or 'Not configured'} "
+                    f"({get_file_mod_time(schedule_file_path)})\n"
+                )
+
+            if ID_TO_EMAIL_MODULE == "ad_api":
+                diagnostics += "- ID to Email Source: Active Directory API (no local file)\n"
+            else:
+                diagnostics += (
+                    f"- ID to Email File: {id_to_email_file_path or 'Not configured'} "
+                    f"({get_file_mod_time(id_to_email_file_path)})\n"
+                )
+
+            if SUPPORTED_LOCATIONS_MODE == "chico":
+                diagnostics += (
+                    f"- Supported Locations File: {supported_locations_file_path or 'Not configured'} "
+                    f"({get_file_mod_time(supported_locations_file_path)})\n"
+                )
+            else:
+                diagnostics += "- Supported Locations File: Not used in this mode\n"
+
+            diagnostics += "\nThis is an automated test email from the Instructor Contact System.\n"
+
             return diagnostics
         except Exception as e:
             log.error(f"Error gathering diagnostics: {e!s}")
@@ -564,9 +636,15 @@ Failed: {len(failed)}
 
     def _lookup_instructor(self, page: ft.Page, email: str):
         try:
+            target_email = (email or "").strip().lower()
+            if not target_email:
+                self._show_snack(page, "Please enter an email")
+                return
+
             emp_id = None
             for eid in self.contact_by_instructor:
-                if self.id_matcher.match_id_to_email(eid) == email:
+                matched_email = (self.id_matcher.match_id_to_email(eid) or "").strip().lower()
+                if matched_email == target_email:
                     emp_id = eid
                     break
 
@@ -584,8 +662,8 @@ Failed: {len(failed)}
             page.update()
 
         except Exception as e:
-            log.error(f"Error looking up instructor: {e!s}")
-            self._show_snack(page, f"Error: {e!s}")
+            log.error(f"Error looking up instructor: {e}")
+            self._show_snack(page, f"Error: {e}")
 
     def _start_semester_deployment(self, page: ft.Page, message_template: str, batch_size: int):
         try:
