@@ -1,4 +1,4 @@
-"""This module uses Active Directory to match Employee IDs to email addresses."""
+"""This module uses Active Directory API to match Employee IDs to email addresses."""
 
 import json
 import logging as log
@@ -6,7 +6,7 @@ import subprocess
 
 
 class Matcher:
-    """Class to match Employee IDs to email addresses using Active Directory."""
+    """Class to match Employee IDs to email addresses using Active Directory API."""
 
     def __init__(self) -> None:
         """Initialize the Matcher with PowerShell queries for Active Directory."""
