@@ -143,7 +143,7 @@ def test_email_parity_by_classroom_to_by_instructor_lookup() -> None:
         }
     )
 
-    for location in by_loc.keys():
+    for location in by_loc:
         emails = _emails_for_location(by_loc, matcher, location)
 
         for email in emails:
