@@ -12,20 +12,18 @@ class Matcher:
         """Initialize the Matcher with PowerShell queries for Active Directory."""
 
         self.all_query = (
-            "Get-ADUser -Filter 'Enabled -eq $true' "
-            "-Properties EmployeeID, EmailAddress | "
-            "Where-Object { -not [string]::IsNullOrWhiteSpace($_.EmployeeID) -and $_.EmailAddress -and "
-            "$_.EmailAddress -match '@' } | "
+            'Get-ADUser -Filter \'Enabled -eq $true -and EmployeeID -like "*" -and '
+            'EmailAddress -like "*@*" -and EmailAddress -notlike "*-admin*"\' '
+            "-Properties EmployeeID, EmailAddress -ResultPageSize 2000 | "
             "Select-Object @{Name='EmployeeID'; Expression={$_.EmployeeID}}, "
             "@{Name='EmailAddress'; Expression={$_.EmailAddress}} | "
             "ConvertTo-Json -Depth 3"
         )
 
         self.single_query = (
-            "Get-ADUser -Filter 'Enabled -eq $true -and EmployeeID -eq \"{id}\"' "
+            'Get-ADUser -Filter \'Enabled -eq $true -and EmployeeID -eq "{id}" -and '
+            'EmailAddress -like "*@*" -and EmailAddress -notlike "*-admin*"\' '
             "-Properties EmployeeID, EmailAddress | "
-            "Where-Object {{ -not [string]::IsNullOrWhiteSpace($_.EmployeeID) -and "
-            "-not [string]::IsNullOrWhiteSpace($_.EmailAddress) -and $_.EmailAddress -match '@' }} | "
             "Select-Object -ExpandProperty EmailAddress"
         )
 
