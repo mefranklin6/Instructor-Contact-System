@@ -111,6 +111,7 @@ class InstructorContactSystem:
         self.contacted_instructors = {}
         self._clipboard = None
         self._deployment_already_contacted_text = None
+        self.df: pd.DataFrame = pd.DataFrame()
 
         if IN_DOCKER:
             log.info("Running in Docker")
@@ -124,47 +125,20 @@ class InstructorContactSystem:
 
         self._initialize_data()
 
-    def _initialize_data(self) -> None:
-        """Initialize data loaders and aggregators."""
-        try:
-            # Optional: Supported Locations Module
-            if slp and SUPPORTED_LOCATIONS_MODE == "chico":
-                slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
-                if not slp_csv:
-                    raise FileNotFoundError(
-                        """No SUPPORTED_LOCATIONS_FILE_PATH Found. 
-                        This is a required file for Chico mode"""
-                    )
-                parser = slp.SupportedLocationsParser(slp_csv)
-                self.supported_locations = parser.run()
+    def _not_in_docker_initialize(self) -> None:
+        if ID_TO_EMAIL_MODULE == "ad_json":
+            import subprocess
 
-            df = pd.DataFrame()
+            if not os.path.exists("id_and_emails_from_ad.json"):
+                if not os.path.exists("\\scripts\\query_ad.ps1"):
+                    log.warning("Missing required script in this configuration: '\\scripts\\query_ad.ps1'")
+                    return
+                log.info("System is in ad_json mode and not in docker. Querying AD now...")
+                subprocess.run("\\scripts\\./query_ad.ps1")
 
-            # Schedule Module
-            if not schedule:
-                log.error("No valid schedule module configured, cannot load schedule data")
-                raise ValueError("Invalid SCHEDULE_MODULE configuration")
-            if SCHEDULE_MODULE == "fl_csv":
-                fl_file = os.getenv("FL_FILE_PATH")
-                if not fl_file:
-                    raise FileNotFoundError("""No FL_FILE_PATH found. 
-                    This is a required file for fl_csv mode""")
-
-                self.loader = schedule.DataLoader(
-                    fl_file_path=fl_file,
-                    supported_locations=self.supported_locations,
-                )
-                current_date = datetime.now()
-                df = self.loader.semester_data(current_date)
-
-            # Aggregator
-            if df is not None and not df.empty and agg:
-                self.aggregator = agg.Aggregator(df=df)
-                self.contact_by_instructor = self.aggregator.by_instructor()
-                self.contact_by_location = self.aggregator.by_location()
-
-            # ID to Email Address Mapper
-            if ID_TO_EMAIL_MODULE == "zoom_csv":
+    def _initialize_id_to_email_module(self) -> None:
+        match ID_TO_EMAIL_MODULE:
+            case "zoom_csv":
                 if not id_matcher_from_zoom_users:
                     raise ValueError("ID Matcher module not found or invalid configuration")
                 zoom_file = os.getenv("ZOOM_CSV_PATH")
@@ -174,21 +148,76 @@ class InstructorContactSystem:
 
                 self.id_matcher = id_matcher_from_zoom_users.Matcher(csv_file_path=zoom_file)
 
-            elif ID_TO_EMAIL_MODULE == "ad_api":
+            case "ad_api":
                 if not id_matcher_from_ad_api:
                     raise ValueError("ID Matcher module not found or invalid configuration")
                 self.id_matcher = id_matcher_from_ad_api.Matcher()
 
-            else:
+            case "ad_json":
+                if not os.path.exists("id_and_emails_from_ad.json"):
+                    raise FileNotFoundError("""No id_and_emails_from_ad.json found. 
+                    Please run scripts/query_ad.ps1 first to generate this file""")
+
+            case _:
                 raise ValueError(f"Invalid ID_TO_EMAIL_MODULE configuration: {ID_TO_EMAIL_MODULE}")
 
-            # Emails (universal)
-            self.email_sender = email_sender.EmailSender()
+    def _initialize_supported_locations_module(self) -> None:
+        if slp and SUPPORTED_LOCATIONS_MODE == "chico":
+            slp_csv = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
+            if not slp_csv:
+                raise FileNotFoundError(
+                    """No SUPPORTED_LOCATIONS_FILE_PATH Found. 
+                    This is a required file for Chico mode"""
+                )
+            parser = slp.SupportedLocationsParser(slp_csv)
+            self.supported_locations = parser.run()
 
-            log.info("Data initialization successful")
-        except Exception as e:
-            log.error(f"Error initializing data: {e!s}")
-            raise
+    def _initialize_schedule_module(self) -> None:
+        if not schedule:
+            log.error("No valid schedule module configured, cannot load schedule data")
+            raise ValueError("Invalid SCHEDULE_MODULE configuration")
+        if SCHEDULE_MODULE == "fl_csv":
+            fl_file = os.getenv("FL_FILE_PATH")
+            if not fl_file:
+                raise FileNotFoundError("""No FL_FILE_PATH found. 
+                This is a required file for fl_csv mode""")
+
+            self.loader = schedule.DataLoader(
+                fl_file_path=fl_file,
+                supported_locations=self.supported_locations,
+            )
+
+    def _initialize_aggregator_module(self):
+        # Aggregator
+        if self.df is not None and not self.df.empty:
+            self.aggregator = agg.Aggregator(df=self.df)
+            self.contact_by_instructor = self.aggregator.by_instructor()
+            self.contact_by_location = self.aggregator.by_location()
+
+    def _initialize_data(self) -> None:
+        """Initialize data loaders and aggregators."""
+
+        current_date = datetime.now()
+
+        if not IN_DOCKER:
+            self._not_in_docker_initialize()
+
+        self._initialize_id_to_email_module()
+        self._initialize_supported_locations_module()
+        self._initialize_schedule_module()
+
+        # Emails (universal)
+        self.email_sender = email_sender.EmailSender()
+
+        if not self.loader:
+            raise ModuleNotFoundError("Required module 'loader' missing")
+
+        df = self.loader.semester_data(current_date)
+        if df is None:
+            raise ValueError("semester_data returned None; cannot continue without schedule data")
+        self.df = df
+
+        log.info("Data initialization successful")
 
     # ---------- Flet 0.80.x helpers ----------
 
@@ -270,18 +299,14 @@ class InstructorContactSystem:
         contact_file = self._get_contact_file_path()
         if not os.path.exists(contact_file):
             return 0
-        try:
-            with open(contact_file) as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                # Only count those with contact_type "start of semester"
-                count = sum(
-                    1 for email, info in data.items() if info.get("contact_type") == "start of semester"
-                )
-                return count
-            return 0
-        except Exception:
-            return 0
+
+        with open(contact_file) as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            # Only count those with contact_type "start of semester"
+            count = sum(1 for email, info in data.items() if info.get("contact_type") == "start of semester")
+            return count
+        return 0
 
     def _save_contact_history(self):
         contact_file = self._get_contact_file_path()
