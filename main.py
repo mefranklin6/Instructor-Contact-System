@@ -12,6 +12,23 @@ import pandas as pd
 
 from src import email_sender
 
+
+def in_docker() -> bool:
+    """Detect if the application is running inside a Docker container."""
+    try:
+        if os.path.exists("/.dockerenv"):
+            return True
+        with open("/proc/1/cgroup") as f:
+            return "docker" in f.read()
+    except Exception:
+        return False
+
+
+IN_DOCKER = in_docker()
+if not IN_DOCKER:
+    load_dotenv()
+    log.info("Loaded environment variables locally from .env file")
+
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO").upper()
 log.basicConfig(
     level=getattr(log, LOGGING_LEVEL, log.DEBUG),
@@ -35,22 +52,6 @@ except ImportError:
         default_semester_start_subject,
     ) = "Set default values in messages.py"
 
-
-def in_docker() -> bool:
-    """Detect if the application is running inside a Docker container."""
-    try:
-        if os.path.exists("/.dockerenv"):
-            return True
-        with open("/proc/1/cgroup") as f:
-            return "docker" in f.read()
-    except Exception:
-        return False
-
-
-IN_DOCKER = in_docker()
-if not IN_DOCKER:
-    load_dotenv()
-    log.info("Loaded environment variables locally from .env file")
 
 SUPPORTED_LOCATIONS_MODE = os.getenv("SUPPORTED_LOCATIONS_MODE", "none").lower()
 if SUPPORTED_LOCATIONS_MODE == "chico":
@@ -274,7 +275,7 @@ class InstructorContactSystem:
     ) -> tuple[dict, dict]:
         """Get aggregated data for a specific date range, or current semester if no range is provided."""
         try:
-            if not self.loader:  # appease
+            if not self.loader:
                 raise ModuleNotFoundError("Data loader module is not configured")
 
             if start_date is not None and end_date is not None:
