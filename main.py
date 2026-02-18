@@ -274,26 +274,23 @@ class InstructorContactSystem:
         self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> tuple[dict, dict]:
         """Get aggregated data for a specific date range, or current semester if no range is provided."""
-        try:
-            if not self.loader:
-                raise ModuleNotFoundError("Data loader module is not configured")
 
-            if start_date is not None and end_date is not None:
-                df = self.loader.range_data(start_date, end_date)
-            else:
-                df = self.loader.semester_data(datetime.now())
+        if not self.loader:
+            raise ModuleNotFoundError("Data loader module is not configured")
 
-            if not agg:
-                raise ModuleNotFoundError("Aggregator module is not configured")
+        if start_date is not None and end_date is not None:
+            df = self.loader.range_data(start_date, end_date)
+        else:
+            df = self.loader.semester_data(datetime.now())
 
-            if df is None or df.empty:
-                raise ValueError("No data available for the specified date range")
+        if not agg:
+            raise ModuleNotFoundError("Aggregator module is not configured")
 
-            temp_aggregator = agg.Aggregator(df=df)
-            return temp_aggregator.by_instructor(), temp_aggregator.by_location()
-        except Exception as e:
-            log.error(f"Error getting data for date range: {e}")
-            return {}, {}
+        if df is None or df.empty:
+            raise ValueError("No data available for the specified date range")
+
+        temp_aggregator = agg.Aggregator(df=df)
+        return temp_aggregator.by_instructor(), temp_aggregator.by_location()
 
     # ---------- App logic ----------
 
