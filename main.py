@@ -135,12 +135,29 @@ class InstructorContactSystem:
         if ID_TO_EMAIL_MODULE == "ad_json":
             import subprocess
 
+            script_path = os.path.join("scripts", "query_ad.ps1")
             if not os.path.exists("id_and_emails_from_ad.json"):
-                if not os.path.exists("\\scripts\\query_ad.ps1"):
-                    log.warning("Missing required script in this configuration: '\\scripts\\query_ad.ps1'")
+                if not os.path.exists(script_path):
+                    log.warning(f"Missing required script in this configuration: '{script_path}'")
                     return
                 log.info("System is in ad_json mode and not in docker. Querying AD now...")
-                subprocess.run("\\scripts\\./query_ad.ps1")
+                try:
+                    result = subprocess.run(
+                        ["powershell.exe", "-File", script_path],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    log.info(f"AD query completed successfully:\n{result.stdout}")
+                    if result.stderr:
+                        log.warning(f"AD query stderr:\n{result.stderr}")
+                except subprocess.TimeoutExpired:
+                    log.error(f"AD query script timed out after 120 seconds: '{script_path}'")
+                    raise
+                except subprocess.CalledProcessError as e:
+                    log.error(f"AD query script failed (exit code {e.returncode}):\n{e.stderr}")
+                    raise
 
     def _initialize_id_to_email_module(self) -> None:
         match ID_TO_EMAIL_MODULE:
@@ -294,7 +311,7 @@ class InstructorContactSystem:
     def _load_contact_history(self):
         contact_file = self._get_contact_file_path()
         if os.path.exists(contact_file):
-            with open(contact_file) as f:
+            with open(contact_file, encoding="utf-8-sig") as f:
                 self.contacted_instructors = json.load(f)
         else:
             self.contacted_instructors = {}
