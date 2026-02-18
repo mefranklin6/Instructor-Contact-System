@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.fl_aggregator import Aggregator
+from src.core.schedule_aggregator import Aggregator
 
 
 def _repo_root() -> Path:
