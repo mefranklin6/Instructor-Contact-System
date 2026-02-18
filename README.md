@@ -72,119 +72,243 @@ Options:
 
 Options:
 
-- **Zoom CSV**: The CSV Users Report from Zoom Admin center
+- **Zoom CSV** (bundled plugin): The CSV Users Report from Zoom Admin center
 
-- **Active Directory API**: Live queries AD for the ID to Email keys. Note: Is not compatible with running in Docker. Must run on a domain-joined workstation with proper privileges and RSAT.
+- **Active Directory API** (bundled plugin): Live queries AD for the ID to Email keys. Note: Is not compatible with running in Docker. Must run on a domain-joined workstation with proper privileges and RSAT.
 
-- Future: Zoom API, ldap3 AD querying
+- **Active Directory JSON** (bundled plugin): Use a script to generate an AD report. The system will use the saved file as the data source.
 
 ### Supported Locations (for now, Chico only and fully optional)
 
-- Sharepoint CSV export of the Supported Locations page
+- Sharepoint CSV export of the Supported Locations page (bundled plugin)
 
-### Docker Runtime
+## Run it
 
-- Linux, or Windows through Rancher Desktop
+### Option 1: Docker (recommended)
 
-## Setup
-
-1. Make sure Docker Engine is installed and running. (If using Windows, suggest installing Rancher Desktop)
-
-2. Clone the project locally
-
-3. Make a file called `.env` in the root of the repository. Copy the `env.example` contents into it and change the settings as needed.
-
-4. Make a file called `messages.py` in the root of the repository. Copy the `messages.py.example` contents into it and change the settings as needed.
-
-5. Configure your Employee ID to Email mapping method:
-   - **Option A: Zoom CSV** - Set `ID_TO_EMAIL_MODULE=zoom_csv` and provide the Zoom users CSV file path
-   - **Option B: Active Directory LDAP** - Set `ID_TO_EMAIL_MODULE=ad_api` (not Docker compatible)
-
-6. `cd` to your repository root and run `docker compose up`.
-      Alternatively, you can run locally if you have Python installed.
-
-      ```pwsh
-      pip install requirements.txt
-      ./main.py
-      ```
-
-The webserver will be at `http://<your_address_or_localhost>:8080`
-
-## Environmental Variables and Configuration
-
-Details about the .env file
-
-```bash
-# ---- SMTP Configuration ----
-SMTP_HOST= # your email / exchange server
-SMTP_PORT= # default: 587
-SMTP_FROM= # email addr you are sending from
-SMTP_USERNAME= # optional
-SMTP_PASSWORD= # optional
-
-# ---- Logging ----
-LOGGING_LEVEL= # See python logging documentation for levels
-
-# ---- Developer Settings ----
-DEV_MODE= # If True, no emails will actually be sent, but they will be logged
-
-# ---- Supported Locations Module ----
-SUPPORTED_LOCATIONS_MODE= # Options are: Chico
-SUPPORTED_LOCATIONS_FILE_PATH= # if in mode Chico, the CSV path from SL Sharepoint export
-
-# ---- ID to Email Module ----
-ID_TO_EMAIL_MODULE= # Options: zoom_csv or ad_api
-ZOOM_CSV_PATH= # If above is zoom_csv, path to the users export 
-
-# ---- Schedule Data Module ----
-SCHEDULE_MODULE= # Options are fl_csv for the FacilitiesLink ingest report
-FL_FILE_PATH= # If above is 'fl_csv', the path to the CSV
-
-```
-
-## Contributing
-
-1. Make a branch of the project under your own Github account
-
-2. Follow the 'Setup' steps documented above, but clone your own branch
-
-3. Make your feature in its' own file and as modular as possible.  Ex: /src/data_loader.py with class DataLoader.
-
-4. Send a pull request when ready
-
-### Do
-
-- Make sure you don't commit any secrets or campus-specific data
-- Add logging
-- Add methods that can be used across modules to /src/utils
-
-```python
-import logging as log
-log.warning("This is a warning")
-log.debug("This is for traces")
-```
-
-### Style
-
-- Ruff linter and formatter
-- PEP 8
-- Type Annotations
-
-### Run
+1. Create `.env` in the repo root (copy from [env.example](env.example)).
+2. Create `messages.py` in the repo root (copy from [messages.py.example](messages.py.example)).
+3. Run:
 
 ```powershell
-cd <to your cloned the repo>
-docker compose down --rmi local --remove-orphans; docker compose up --build --force-recreate --renew-anon-volumes
+docker compose up --build
 ```
 
-In a browser: go to `127.0.0.1:8080`
+App will be available at `http://localhost:8080`.
 
-## Maintenance
+### Option 2: Local (Python)
 
-### Zoom Users file
+```powershell
+pip install -r requirements.txt
+pip install python-dotenv
+python main.py
+```
 
-Zoom Admin -> User Management -> Users -> Export -> All users in the table
+---
 
-### Chico Supported Locations (Chico only)
+## Configuration (.env)
 
-Go to the supported locations intranet page: Export -> Export to CSV
+See [env.example](env.example) for a starting point.
+
+### Key settings
+
+- **DEV_MODE**
+  - `True`: emails are not sent; actions are logged instead.
+  - `False`: real emails are sent.
+
+- **SUPPORTED_LOCATIONS_MODE**
+  - `none` (no filtering)
+  - `chico` (bundled parser)
+  - `module:attr` (external plugin factory)
+
+- **ID_TO_EMAIL_MODULE** (required)
+  - `zoom_csv` (bundled)
+  - `ad_api` (bundled; **not supported in Docker**)
+  - `ad_json` (bundled)
+  - `module:attr` (external plugin factory)
+
+- **SCHEDULE_MODULE** (required)
+  - `fl_csv` (bundled)
+  - `module:attr` (external plugin factory)
+
+### File-path settings (used depending on modes)
+
+- `SUPPORTED_LOCATIONS_FILE_PATH` (required when `SUPPORTED_LOCATIONS_MODE=chico`)
+- `ZOOM_CSV_PATH` (required when `ID_TO_EMAIL_MODULE=zoom_csv`)
+- `FL_FILE_PATH` (required when `SCHEDULE_MODULE=fl_csv`)
+
+---
+
+## Contributing: Plugin System
+
+The core constructs three pluggable components via [`src.plugins.system_plugins`](src/plugins/system_plugins.py):
+
+- Supported locations provider: [`src.plugins.system_plugins.create_supported_locations`](src/plugins/system_plugins.py)
+- ID→Email matcher: [`src.plugins.system_plugins.create_id_matcher`](src/plugins/system_plugins.py)
+- Schedule loader: [`src.plugins.system_plugins.create_schedule_loader`](src/plugins/system_plugins.py)
+
+Each setting can be either:
+
+1. A **bundled key** (e.g. `zoom_csv`, `fl_csv`, `chico`) implemented under [ics_bundled_plugins/](ics_bundled_plugins/__init__.py), or
+2. An **external plugin factory** specified as `module:attribute`, imported via [`src.plugins.loader.import_from_spec`](src/plugins/loader.py).
+
+### External plugin requirements
+
+External plugins must be importable by Python (installed package, or otherwise on `PYTHONPATH`).
+
+Because the plugin layer calls factories using keyword arguments, your factory should accept the named kwargs shown below.
+
+#### 1) Supported locations plugin (`SUPPORTED_LOCATIONS_MODE=module:attr`)
+
+Factory called like:
+
+```py
+create(settings=settings)
+```
+
+Return value:
+
+- `None` (to disable filtering), or
+- a list of `(building, room)` tuples, e.g. `[("SCI", "110"), ...]`
+
+#### 2) ID→Email matcher plugin (`ID_TO_EMAIL_MODULE=module:attr`)
+
+Factory called like:
+
+```py
+create(settings=settings, in_docker=in_docker)
+```
+
+Returned object must provide:
+
+```py
+match_id_to_email(emp_id: str) -> str
+```
+
+Return an empty string if not found.
+
+#### 3) Schedule loader plugin (`SCHEDULE_MODULE=module:attr`)
+
+Factory called like:
+
+```py
+create(settings=settings, supported_locations=supported_locations)
+```
+
+Returned object must provide:
+
+- `semester_data(date: datetime) -> pandas.DataFrame | None`
+- `range_data(start_date: datetime, end_date: datetime) -> pandas.DataFrame`
+
+The core then aggregates the returned DataFrame using [`src.core.schedule_aggregator.Aggregator`](src/core/schedule_aggregator.py), which expects these normalized columns to exist:
+
+- `BUILDING`
+- `ROOM`
+- `INSTRUCTOR1_EMPLID`
+
+Your loader can keep extra columns; the aggregator only depends on those.
+
+---
+
+## Example external plugins
+
+These examples show the minimum shapes required.
+
+### Example: external ID→Email matcher
+
+`ID_TO_EMAIL_MODULE=my_pkg.my_matcher:create`
+
+```py
+from src.core.settings import Settings
+
+class Matcher:
+    def __init__(self, mapping: dict[str, str]) -> None:
+        self._mapping = mapping
+
+    def match_id_to_email(self, emp_id: str) -> str:
+        return self._mapping.get(str(emp_id).zfill(9), "")
+
+def create(*, settings: Settings, in_docker: bool) -> Matcher:
+    # Load from anywhere you want (DB/API/file). Keep secrets out of git.
+    mapping = {"000000001": "alice@example.com"}
+    return Matcher(mapping)
+```
+
+### Example: external supported locations
+
+`SUPPORTED_LOCATIONS_MODE=my_pkg.supported:create`
+
+```py
+from src.core.settings import Settings
+
+def create(*, settings: Settings):
+    # Return list[tuple[str, str]] or None
+    return [("SCI", "110"), ("ART", "202")]
+```
+
+### Example: external schedule loader (normalized output)
+
+`SCHEDULE_MODULE=my_pkg.schedule:create`
+
+```py
+from datetime import datetime
+import pandas as pd
+from src.core.settings import Settings
+
+class Loader:
+    def semester_data(self, date: datetime) -> pd.DataFrame | None:
+        return pd.DataFrame(
+            [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "110"}]
+        )
+
+    def range_data(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
+        return self.semester_data(start_date) or pd.DataFrame()
+
+def create(*, settings: Settings, supported_locations):
+    return Loader()
+```
+
+---
+
+## Bundled plugins included in this repo
+
+These keys are wired in [`src.plugins.system_plugins`](src/plugins/system_plugins.py):
+
+### Supported locations
+
+- `chico` → [ics_bundled_plugins/chico_supported_location_parser.py](ics_bundled_plugins/chico_supported_location_parser.py)
+
+### ID→Email matchers
+
+- `zoom_csv` → [ics_bundled_plugins/id_matcher_from_zoom_users.py](ics_bundled_plugins/id_matcher_from_zoom_users.py)
+- `ad_api` → [ics_bundled_plugins/id_matcher_from_ad_api.py](ics_bundled_plugins/id_matcher_from_ad_api.py) (**not Docker compatible**)
+- `ad_json` → [ics_bundled_plugins/id_matcher_from_ad_json.py](ics_bundled_plugins/id_matcher_from_ad_json.py)
+
+### Schedule loader
+
+- `fl_csv` → [ics_bundled_plugins/fl_data_loader.py](ics_bundled_plugins/fl_data_loader.py)
+
+---
+
+## Adding a new bundled plugin to this repo
+
+1. Add your implementation under [ics_bundled_plugins/](ics_bundled_plugins/__init__.py).
+2. Add a new key branch in [src/plugins/system_plugins.py](src/plugins/system_plugins.py).
+3. Add tests under [tests/](tests/).
+   - This repo uses Ruff + pydocstyle rules; test functions should have short docstrings.
+
+---
+
+## Lint + tests
+
+```powershell
+ruff format .
+ruff check .
+pytest -q
+```
+
+---
+
+## Notes / gotchas
+
+- `ad_api` runs PowerShell AD queries and is blocked in Docker by design (see [`src.plugins.system_plugins.create_id_matcher`](src/plugins/system_plugins.py)).

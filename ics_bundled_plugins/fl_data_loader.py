@@ -9,36 +9,20 @@ from src.utils import csv_to_dataframe, raise_error_window
 
 
 class DataLoader:
-    """
-    Loads and filters data from the FacilitiesLink schedule CSV export.
-
-    Args:
-        fl_file_path: The calendar CSV that gets exported to FacilitiesLink
-
-        supported_locations: optional list of tuples (building, room) you want included.
-        If used, any location not in the list will be filtered out
-    """
+    """Load and filter data from a FacilitiesLink schedule CSV export."""
 
     def __init__(
         self,
         fl_file_path: str,
         supported_locations: list[tuple[str, str]] | None = None,
     ) -> None:
-        """Initialize the DataLoader with the given file path and optional supported locations filter."""
+        """Initialize with a FacilitiesLink CSV path and optional location filter."""
         self.file_path = fl_file_path
         self.supported_locations = supported_locations
         self.clean_df = self._load_and_clean()
 
     def semester_data(self, date: datetime) -> pd.DataFrame | None:
-        """
-        Load and filter data to include only classes within the semester of the given date.
-
-        Args:
-            date (datetime): A date within the semester to filter for.
-
-        Returns:
-            pd.DataFrame | None: The filtered DataFrame, or None if cleaning failed.
-        """
+        """Return schedule rows within the semester containing the given date."""
         if self.clean_df is None:
             log.error("Failed to load clean dataframe")
             return pd.DataFrame()
@@ -49,14 +33,7 @@ class DataLoader:
         return df
 
     def range_data(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-        """
-        Load and filter data to include classes that meet on specific dates within the range.
-
-        Notes:
-        - We filter by *actual meeting occurrences* implied by DAYS1 + CLASS_START_DATE/CLASS_END_DATE.
-        - We do NOT expand to per-occurrence rows; we keep the original class rows that meet at least once
-          in [start_date, end_date].
-        """
+        """Return schedule rows that meet at least once within [start_date, end_date]."""
         try:
             if self.clean_df is None:
                 log.error("Failed to load clean dataframe")
@@ -100,20 +77,9 @@ class DataLoader:
     def _expand_to_meeting_dates(
         self, df: pd.DataFrame, start_date: pd.Timestamp, end_date: pd.Timestamp
     ) -> pd.DataFrame:
-        """
-        Filters to class rows that meet at least once within [start_date, end_date].
-
-        This does NOT expand to per-occurrence rows; it keeps original class rows.
-
-        Args:
-            df: DataFrame with CLASS_START_DATE, CLASS_END_DATE, DAYS1 columns
-            start_date: start of the date range to filter for
-            end_date: end of the date range to filter for
-        """
-        # Map day codes to Python weekday numbers (Monday=0, Sunday=6)
+        """Filter to class rows that meet at least once within [start_date, end_date]."""
         day_map = {"M": 0, "T": 1, "W": 2, "R": 3, "F": 4, "S": 5, "U": 6}
 
-        # Filter out TBA and empty DAYS1 values
         df = df[
             df["DAYS1"].notna()
             & (df["DAYS1"].astype(str).str.strip() != "")
@@ -123,12 +89,10 @@ class DataLoader:
         if df.empty:
             return pd.DataFrame()
 
-        # Only consider classes whose span overlaps the requested window
         df = df[(df["CLASS_START_DATE"] <= end_date) & (df["CLASS_END_DATE"] >= start_date)].copy()
         if df.empty:
             return pd.DataFrame()
 
-        # Per-row search window (intersection of class span and requested range)
         df["search_start"] = df["CLASS_START_DATE"].where(df["CLASS_START_DATE"] > start_date, start_date)
         df["search_end"] = df["CLASS_END_DATE"].where(df["CLASS_END_DATE"] < end_date, end_date)
 
@@ -142,12 +106,6 @@ class DataLoader:
             return pd.DataFrame()
 
         def meets_in_window(row) -> bool:
-            """
-            Determines if a class meets within the specified date range.
-
-            For each meeting weekday, compute the first date >= search_start that has that weekday.
-            If any such date is <= search_end, the class meets in the window.
-            """
             ss: pd.Timestamp = row["search_start"]
             se: pd.Timestamp = row["search_end"]
             ss_wd = ss.weekday()
@@ -161,7 +119,6 @@ class DataLoader:
 
         mask = df.apply(meets_in_window, axis=1)
         result_df = df.loc[mask].copy()
-
         return result_df.drop(columns=["search_start", "search_end", "meeting_weekdays"])
 
     def _load_and_clean(self) -> pd.DataFrame | None:
@@ -176,13 +133,7 @@ class DataLoader:
         return None
 
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame | None:
-        """
-        Cleans the DataFrame by removing invalid or irrelevant rows.
-
-        - Removes rows with missing values in critical columns.
-        - Excludes online courses.
-        - Excludes courses with 'TBA' schedules.
-        """
+        """Drop invalid rows and normalize key fields."""
         try:
             initial_rows = len(df)
             required_columns = [
@@ -202,8 +153,6 @@ class DataLoader:
             filtered_df = filtered_df[filtered_df["BUILDING"] != "ONLINE"]
             filtered_df = filtered_df[filtered_df["DAYS1"] != "TBA"]
 
-            # Normalize instructor IDs to match Zoom export normalization:
-            #  - strip, numeric-only, then zero-pad to 9 digits.
             filtered_df["INSTRUCTOR1_EMPLID"] = filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
             filtered_df = filtered_df[
                 filtered_df["INSTRUCTOR1_EMPLID"].str.replace(".", "", regex=False).str.isdigit()
@@ -226,13 +175,11 @@ class DataLoader:
             return None
 
     def _convert_dates(self, df: pd.DataFrame) -> pd.DataFrame | None:
-        """Convert date columns from string format to datetime objects."""
+        """Convert FacilitiesLink date columns to pandas datetimes."""
         try:
-            # Primary expected format from FacilitiesLink exports
             start = pd.to_datetime(df["CLASS_START_DATE"], format="%d-%b-%y", errors="coerce")
             end = pd.to_datetime(df["CLASS_END_DATE"], format="%d-%b-%y", errors="coerce")
 
-            # Fallback: let pandas infer format for any rows that didn't parse
             if start.isna().any():
                 start_fallback = pd.to_datetime(df.loc[start.isna(), "CLASS_START_DATE"], errors="coerce")
                 start.loc[start.isna()] = start_fallback
@@ -243,7 +190,6 @@ class DataLoader:
             df["CLASS_START_DATE"] = start
             df["CLASS_END_DATE"] = end
 
-            # If we still have NaTs, fail loudly (downstream logic relies on these)
             if df["CLASS_START_DATE"].isna().any() or df["CLASS_END_DATE"].isna().any():
                 bad_start = int(df["CLASS_START_DATE"].isna().sum())
                 bad_end = int(df["CLASS_END_DATE"].isna().sum())
@@ -260,44 +206,61 @@ class DataLoader:
             log.error(f"Date conversion error: {e!s}")
             return None
 
-    def _filter_to_semester(self, df: pd.DataFrame, date: datetime) -> pd.DataFrame | None:
-        try:
-            before_rows = len(df)
-            target_date = pd.to_datetime(date).normalize()  # Strip time component
-            df = df[(df["CLASS_START_DATE"] <= target_date) & (df["CLASS_END_DATE"] >= target_date)]
-
-            # All classes within a semester should have the same TERM value
-            term_is_all_the_same = df["TERM"].nunique() <= 1
-            if term_is_all_the_same:
-                log.debug(f"All rows have the same TERM value: {df['TERM'].iloc[0]}")
-            else:
-                log.warning(f"Multiple TERM values found: {df['TERM'].unique()}")
-
-            log.debug(f"Filtered to current semester. Rows before: {before_rows}, Rows after: {len(df)}")
+    def _filter_to_supported_locations(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Filter schedule to only explicitly supported (building, room) tuples."""
+        if not self.supported_locations:
             return df
-        except Exception as e:
-            raise_error_window(
-                f"An error occurred while filtering to the current semester: {e!s}",
-                title="Semester Filtering Error",
-            )
-            log.error(f"Semester filtering error: {e!s}")
-            return None
+        supported = {(b.upper().strip(), r.upper().strip()) for b, r in self.supported_locations}
+        df = df.copy()
+        df["BUILDING"] = df["BUILDING"].astype(str).str.upper().str.strip()
+        df["ROOM"] = df["ROOM"].astype(str).str.upper().str.strip()
+        return df[df.apply(lambda r: (r["BUILDING"], r["ROOM"]) in supported, axis=1)].copy()
 
-    def _filter_to_supported_locations(self, df: pd.DataFrame) -> pd.DataFrame | None:
-        try:
-            initial_rows = len(df)
+    def _filter_to_semester(self, df: pd.DataFrame, date: datetime) -> pd.DataFrame:
+        """Filter rows to a single academic term (“semester”) near `date`.
 
-            supported_set = set(self.supported_locations or [])
-            df["_location_tuple"] = list(zip(df["BUILDING"], df["ROOM"], strict=False))
-            df = df[df["_location_tuple"].isin(supported_set)]
-            df = df.drop(columns=["_location_tuple"])
-            log.debug(f"Filtered to supported locations. Rows before: {initial_rows}, Rows after: {len(df)}")
+        The FacilitiesLink export may contain many terms (multiple years). Pre-change
+        behavior expected `semester_data()` to return *one* current term, not the full export.
+
+        Selection strategy:
+        1) Prefer a TERM whose overall date window contains `date`.
+        2) If none contain it (between terms), pick the next upcoming TERM by start date.
+        3) If there's no upcoming term, fall back to the most recent TERM.
+        """
+
+        if df.empty:
             return df
 
-        except Exception as e:
-            raise_error_window(
-                f"An error occurred while filtering to supported locations: {e!s}",
-                title="Supported Locations Filtering Error",
-            )
-            log.error(f"Supported locations filtering error: {e!s}")
-            return None
+        if "TERM" not in df.columns:
+            raise ValueError("FacilitiesLink data is missing required column TERM")
+
+        target = pd.to_datetime(date).normalize()
+
+        # Compute per-TERM window using min start + max end.
+        term_windows = (
+            df.groupby("TERM", dropna=False)
+            .agg(term_start=("CLASS_START_DATE", "min"), term_end=("CLASS_END_DATE", "max"))
+            .reset_index()
+        )
+
+        # 1) Terms containing the target date
+        containing = term_windows[
+            (term_windows["term_start"] <= target) & (target <= term_windows["term_end"])
+        ].copy()
+        if not containing.empty:
+            # If multiple overlap (unlikely), pick the one with the latest start.
+            chosen_term = containing.sort_values("term_start", ascending=False).iloc[0]["TERM"]
+            return df[df["TERM"] == chosen_term].copy()
+
+        # 2) Next upcoming term
+        upcoming = term_windows[term_windows["term_start"] > target].copy()
+        if not upcoming.empty:
+            chosen_term = upcoming.sort_values("term_start", ascending=True).iloc[0]["TERM"]
+            return df[df["TERM"] == chosen_term].copy()
+
+        # 3) Most recent term
+        chosen_term = term_windows.sort_values("term_end", ascending=False).iloc[0]["TERM"]
+        return df[df["TERM"] == chosen_term].copy()
+
+
+__all__ = ["DataLoader"]

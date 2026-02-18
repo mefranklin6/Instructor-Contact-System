@@ -7,13 +7,11 @@ at least once in the requested [start_date, end_date] window, based on:
 - exclusions like TBA / empty days
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 
 import pandas as pd
 
-from src.fl_data_loader import DataLoader
+from ics_bundled_plugins.fl_data_loader import DataLoader
 
 
 def _base_row(**overrides: object) -> dict[str, object]:
@@ -53,7 +51,7 @@ def test_range_data_single_day_includes_only_classes_that_meet_that_day(monkeypa
     )
 
     # Patch CSV loader used by DataLoader.__init__ so no real file is needed.
-    monkeypatch.setattr("src.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
 
@@ -77,7 +75,7 @@ def test_range_data_multi_day_window_includes_any_class_meeting_within_window(mo
         ]
     )
 
-    monkeypatch.setattr("src.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
 

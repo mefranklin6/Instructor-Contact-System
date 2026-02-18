@@ -6,13 +6,11 @@ These tests focus on the core pipeline that prepares schedule data for aggregati
 - Date parsing with primary format and fallback inference
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 
 import pandas as pd
 
-from src.fl_data_loader import DataLoader
+from ics_bundled_plugins.fl_data_loader import DataLoader
 
 
 def _row(**overrides: object) -> dict[str, object]:
@@ -45,8 +43,8 @@ def test_clean_dataframe_filters_invalid_rows_and_normalizes_ids(monkeypatch) ->
         ]
     )
 
-    monkeypatch.setattr("src.fl_data_loader.csv_to_dataframe", lambda _: df)
-    monkeypatch.setattr("src.fl_data_loader.raise_error_window", lambda *a, **k: None)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.raise_error_window", lambda *a, **k: None)
 
     loader = DataLoader(fl_file_path="dummy.csv")
     assert loader.clean_df is not None
@@ -74,8 +72,8 @@ def test_convert_dates_parses_primary_and_fallback_formats(monkeypatch) -> None:
         ]
     )
 
-    monkeypatch.setattr("src.fl_data_loader.csv_to_dataframe", lambda _: df)
-    monkeypatch.setattr("src.fl_data_loader.raise_error_window", lambda *a, **k: None)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.raise_error_window", lambda *a, **k: None)
 
     loader = DataLoader(fl_file_path="dummy.csv")
     assert loader.clean_df is not None
@@ -92,3 +90,40 @@ def test_convert_dates_parses_primary_and_fallback_formats(monkeypatch) -> None:
 
     # Sanity check on one known value.
     assert datetime(2025, 1, 1).date() in set(start_dates.dt.date.tolist())
+
+
+def test_semester_data_filters_to_single_term(monkeypatch) -> None:
+    """semester_data() should pick one TERM from a multi-term export."""
+    df = pd.DataFrame(
+        [
+            # Spring-ish term
+            _row(
+                INSTRUCTOR1_EMPLID="2",
+                TERM="2232",
+                CLASS_START_DATE="23-JAN-23",
+                CLASS_END_DATE="19-MAY-23",
+                BUILDING="SCI",
+                ROOM="101",
+            ),
+            # Fall-ish term
+            _row(
+                INSTRUCTOR1_EMPLID="7",
+                TERM="2238",
+                CLASS_START_DATE="21-AUG-23",
+                CLASS_END_DATE="15-DEC-23",
+                BUILDING="ART",
+                ROOM="202",
+            ),
+        ]
+    )
+
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.raise_error_window", lambda *a, **k: None)
+
+    loader = DataLoader(fl_file_path="dummy.csv")
+
+    # Date within fall term window should only return TERM 2238 rows.
+    out = loader.semester_data(datetime(2023, 10, 1))
+    assert out is not None
+    assert not out.empty
+    assert set(out["TERM"].astype(str).unique().tolist()) == {"2238"}

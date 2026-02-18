@@ -7,10 +7,10 @@ from src.utils import csv_to_dataframe
 
 
 class SupportedLocationsParser:
-    """This is a optional and Chico-specific Sharepoint CSV parser."""
+    """Optional Chico-specific Sharepoint CSV parser."""
 
     def __init__(self, file_path: str) -> None:
-        """Initialize the SupportedLocationsParser with the given file path."""
+        """Initialize with the path to the Supported Locations CSV export."""
         self.file_path = file_path
         # Match 3-4 uppercase letters (building), optional whitespace/dash, then rest (room)
         self.pattern = re.compile(r"^([A-Z]{3,4})[\s\-]*(.+)$")
@@ -44,5 +44,4 @@ class SupportedLocationsParser:
             return []
 
 
-if __name__ == "__main__":
-    pass
+__all__ = ["SupportedLocationsParser"]

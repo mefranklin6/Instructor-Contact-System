@@ -1,4 +1,4 @@
-"""This module uses Active Directory API to match Employee IDs to email addresses."""
+"""Active Directory API matcher for EmployeeID -> EmailAddress."""
 
 import json
 import logging as log
@@ -6,11 +6,10 @@ import subprocess
 
 
 class Matcher:
-    """Class to match Employee IDs to email addresses using Active Directory API."""
+    """Match Employee IDs to email addresses using PowerShell AD queries."""
 
     def __init__(self) -> None:
-        """Initialize the Matcher with PowerShell queries for Active Directory."""
-
+        """Initialize and cache the full mapping from Active Directory."""
         self.all_query = (
             'Get-ADUser -Filter \'Enabled -eq $true -and EmployeeID -like "*" -and '
             'EmailAddress -like "*@*" -and EmailAddress -notlike "*-admin*"\' '
@@ -28,34 +27,22 @@ class Matcher:
         )
 
         self._id_to_email: dict[str, str] | None = None
-
-        # This will take some time but it's worth getting it out of the way now.
         self._load_all_id_and_email_map()
 
-    @property
-    def id_to_email_map(self) -> dict[str, str]:
-        """Get the cached mapping of Employee IDs to email addresses.
+    @staticmethod
+    def _normalize_employee_id(employee_id: object) -> str:
+        """Normalize an EmployeeID to a 9-digit, zero-padded string when numeric."""
+        if employee_id is None:
+            return ""
 
-        Lazily loads the data on first access if not already loaded.
+        value = str(employee_id).strip()
+        if not value:
+            return ""
 
-        Returns:
-            dict[str, str]: A dictionary mapping Employee IDs to email addresses.
-        """
-        if self._id_to_email is None:
-            log.info("ID to email mapping not loaded yet, loading from Active Directory...")
-            self._load_all_id_and_email_map()
-        return self._id_to_email or {}
+        return value.zfill(9) if value.isdigit() else value
 
-    def _pwsh_query(self, query: str, return_type: str) -> list | str:
-        """Execute a PowerShell query and return the result.
-
-        Args:
-            query: The PowerShell query to execute.
-            return_type: The expected return type ("list" or "str").
-
-        Returns:
-            list | str: The result of the PowerShell query, either as a list or a string.
-        """
+    def _pwsh_query(self, query: str, return_type: str) -> list[dict[str, str]] | str:
+        """Execute a PowerShell query and return the parsed output."""
         try:
             result = subprocess.run(
                 [
@@ -67,7 +54,7 @@ class Matcher:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 minute timeout for large AD queries
+                timeout=300,
             )
         except subprocess.TimeoutExpired:
             log.error("PowerShell query timed out after 300 seconds")
@@ -87,23 +74,18 @@ class Matcher:
                 return []
             try:
                 parsed = json.loads(stdout)
-                # Handle single object case - PowerShell returns object instead of array
                 if isinstance(parsed, dict):
                     return [parsed]
                 return parsed if isinstance(parsed, list) else []
             except json.JSONDecodeError as e:
                 log.error(f"Failed to parse JSON from PowerShell output: {e}")
-                log.debug(f"Raw PowerShell stdout: {stdout[:500]}")  # Log first 500 chars
+                log.debug(f"Raw PowerShell stdout: {stdout[:500]}")
                 return []
 
-        return result.stdout.strip()
+        return (result.stdout or "").strip()
 
     def _load_all_id_and_email_map(self) -> None:
-        """Query Active Directory for all Employee IDs and their corresponding email addresses.
-
-        Stores the results as a dictionary for O(1) lookup performance.
-        Note: This operation can be expensive for large Active Directory environments.
-        """
+        """Load all EmployeeID->EmailAddress pairs into a dict cache."""
         log.info("Querying Active Directory for all Employee IDs and email addresses...")
         data = self._pwsh_query(self.all_query, "list")
 
@@ -112,54 +94,38 @@ class Matcher:
             self._id_to_email = {}
             return
 
-        # Convert list of dicts to single dict for O(1) lookups
         self._id_to_email = {}
         for item in data:
             if isinstance(item, dict) and "EmployeeID" in item and "EmailAddress" in item:
-                emp_id = str(item["EmployeeID"]).strip()
+                emp_id = self._normalize_employee_id(item["EmployeeID"])
                 email = str(item["EmailAddress"]).strip()
                 if emp_id and email:
                     self._id_to_email[emp_id] = email
 
         log.info(f"Successfully loaded {len(self._id_to_email)} Employee ID to email mappings")
-        return
 
     def match_id_to_email(self, id: str) -> str:
-        """Maps a single Employee ID to an email address.
-
-        Args:
-            id: The Employee ID to look up.
-
-        Returns:
-            str: The email address corresponding to the Employee ID, or an empty string if not found.
-        """
-        if id is None:
-            log.debug("Provided Employee ID is None, returning empty string")
+        """Return the email for `id`, or an empty string if not found."""
+        normalized_id = self._normalize_employee_id(id)
+        if not normalized_id:
             return ""
 
-        id = str(id).strip()
-        if not id:
-            log.debug("Provided Employee ID is empty after stripping, returning empty string")
-            return ""
+        if self._id_to_email is not None and normalized_id in self._id_to_email:
+            return self._id_to_email[normalized_id]
 
-        # Check cached dictionary first (O(1) lookup)
-        if self._id_to_email is not None and id in self._id_to_email:
-            log.debug(f"Cache hit for ID {id}")
-            return self._id_to_email[id]
-
-        # If cache miss, perform single query
-        safe_id = id.replace('"', '""')
-        log.debug(f"Cache miss for ID {id}, performing single AD query")
-
+        safe_id = normalized_id.replace('"', '""')
         result = self._pwsh_query(self.single_query.format(id=safe_id), "str")
 
         if result and isinstance(result, str):
-            # Add to cache for future lookups
+            result = next((line.strip() for line in result.splitlines() if line.strip()), "")
+            if not result:
+                return ""
             if self._id_to_email is None:
                 self._id_to_email = {}
-            self._id_to_email[id] = result
-            log.debug(f"Single query result for ID {id}: {result}")
+            self._id_to_email[normalized_id] = result
             return result
 
-        log.warning(f"No email found for Employee ID: {id}")
         return ""
+
+
+__all__ = ["Matcher"]

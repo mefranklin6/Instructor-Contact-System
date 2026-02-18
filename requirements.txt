@@ -3,4 +3,3 @@ flet-cli==0.80.1
 flet-desktop==0.80.2
 flet-web==0.80.1
 pandas
-pytest
