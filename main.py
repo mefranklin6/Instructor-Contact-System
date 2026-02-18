@@ -332,6 +332,22 @@ class InstructorContactSystem:
             import platform
             import sys
 
+            def runtime_impl(obj) -> str:
+                if obj is None:
+                    return "Not initialized"
+                return f"{type(obj).__module__}.{type(obj).__name__}"
+
+            def runtime_value_summary(obj) -> str:
+                if obj is None:
+                    return "Not initialized"
+                if isinstance(obj, dict):
+                    return f"dict (len={len(obj)})"
+                if isinstance(obj, list):
+                    return f"list (len={len(obj)})"
+                if isinstance(obj, set):
+                    return f"set (len={len(obj)})"
+                return type(obj).__name__
+
             def get_file_mod_time(file_path: str | None) -> str:
                 if not file_path:
                     return "Not configured"
@@ -364,20 +380,12 @@ class InstructorContactSystem:
                 supported_locations_file_path = os.getenv("SUPPORTED_LOCATIONS_FILE_PATH")
 
             # --- Module/load status ---
-            supported_locations_loaded = bool(self.supported_locations)
-            loader_loaded = self.loader is not None
-            aggregator_loaded = self.aggregator is not None
+            supported_locations_summary = runtime_value_summary(self.supported_locations)
+            loader_impl = runtime_impl(self.loader)
+            aggregator_impl = runtime_impl(self.aggregator)
 
-            id_matcher_loaded = self.id_matcher is not None
-            email_sender_loaded = self.email_sender is not None
-
-            # Imported module references (globals)
-            schedule_module_loaded = bool(schedule)
-            aggregator_module_loaded = bool(agg)
-            slp_module_loaded = slp is not None
-            id_zoom_module_loaded = id_matcher_from_zoom_users is not None
-            id_ad_api_module_loaded = id_matcher_from_ad_api is not None
-            id_ad_json_module_loaded = id_matcher_from_ad_json is not None
+            id_matcher_impl = runtime_impl(getattr(self, "id_matcher", None))
+            email_sender_impl = runtime_impl(self.email_sender)
 
             # --- Render ---
             diagnostics = f"""Server Diagnostics Report
@@ -397,20 +405,12 @@ Configured Modes:
 - ID to Email Mode: {ID_TO_EMAIL_MODULE}
 - Schedule Module: {SCHEDULE_MODULE}
 
-Loaded Components:
-- Email Sender: {email_sender_loaded}
-- ID Matcher: {id_matcher_loaded}
-- Supported Locations Data: {supported_locations_loaded}
-- Schedule Loader: {loader_loaded}
-- Aggregator: {aggregator_loaded}
-
-Imported Modules:
-- Schedule Module Imported: {schedule_module_loaded}
-- Aggregator Module Imported: {aggregator_module_loaded}
-- Supported Locations Parser Imported: {slp_module_loaded}
-- ID Matcher (zoom_csv) Imported: {id_zoom_module_loaded}
-- ID Matcher (ad_api) Imported: {id_ad_api_module_loaded}
-- ID Matcher (ad_json) Imported: {id_ad_json_module_loaded}
+Runtime Implementations:
+- Email Sender: {email_sender_impl}
+- ID Matcher: {id_matcher_impl}
+- Supported Locations Data: {supported_locations_summary}
+- Schedule Loader: {loader_impl}
+- Aggregator: {aggregator_impl}
 
 Data Status:
 - Total Instructors: {len(self.contact_by_instructor)}
