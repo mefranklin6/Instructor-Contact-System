@@ -283,9 +283,6 @@ class InstructorContactSystem:
         else:
             df = self.loader.semester_data(datetime.now())
 
-        if not agg:
-            raise ModuleNotFoundError("Aggregator module is not configured")
-
         if df is None or df.empty:
             raise ValueError("No data available for the specified date range")
 
@@ -304,17 +301,12 @@ class InstructorContactSystem:
 
     def _get_already_contacted_count(self) -> int:
         """Count instructors contacted for 'start of semester' deployment only."""
-        contact_file = self._get_contact_file_path()
-        if not os.path.exists(contact_file):
-            return 0
-
-        with open(contact_file) as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            # Only count those with contact_type "start of semester"
-            count = sum(1 for email, info in data.items() if info.get("contact_type") == "start of semester")
-            return count
-        return 0
+        self._load_contact_history()
+        return sum(
+            1
+            for info in self.contacted_instructors.values()
+            if info.get("contact_type") == "start of semester"
+        )
 
     def _save_contact_history(self):
         contact_file = self._get_contact_file_path()
@@ -473,9 +465,9 @@ Files:
                     self._show_snack(page, "Failed to send test email")
                     log.error(f"Failed to send test email to {email}")
             else:
-                log.info(f"DEV MODE: Would have sent test email to {email}")
-                log.info(f"Subject: {subject}")
-                log.info(f"Message:\n{message}")
+                log.warning(f"DEV MODE: Would have sent test email to {email}")
+                log.warning(f"Subject: {subject}")
+                log.warning(f"Message:\n{message}")
                 self._show_snack(page, f"DEV MODE: Test email logged (not sent) for {email}")
 
         except Exception as e:
