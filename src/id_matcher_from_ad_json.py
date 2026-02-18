@@ -19,7 +19,7 @@ class Matcher:
 
     def _load_all_id_and_email_map(self) -> None:
 
-        with AD_JSON_PATH.open("r", encoding="utf-8") as f:
+        with AD_JSON_PATH.open("r", encoding="utf-8-sig") as f:
             data = json.load(f)
 
         if not isinstance(data, list):
