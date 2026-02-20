@@ -13,14 +13,14 @@ from typing import Any
 
 import pandas as pd
 
-from src import email_sender
-from src.core.schedule_aggregator import Aggregator
-from src.core.settings import Settings
-from src.plugins.system_plugins import (
+from core.system_plugins import (
     create_id_matcher,
     create_schedule_loader,
     create_supported_locations,
 )
+from src import email_sender
+from src.core.schedule_aggregator import Aggregator
+from src.core.settings import Settings
 
 MAX_FAILED_DISPLAY_DEFAULT = 50
 
@@ -67,6 +67,8 @@ class InstructorContactSystemCore:
         self.supported_locations: Any | None = None
         self.loader: Any | None = None
         self.aggregator: Any | None = None
+        self.id_matcher: Any | None = None
+        self.email_sender: Any | None = None
 
         self.contact_by_instructor: dict[str, list[str]] = {}
         self.contact_by_location: dict[str, list[str]] = {}
@@ -237,7 +239,7 @@ class InstructorContactSystemCore:
                         return str(len(payload))
                     return "Unknown"
                 except Exception as e:
-                    return f"Error: {e!s}"
+                    return f"Error: {e}"
 
             generated = datetime.now().isoformat()
 
@@ -328,20 +330,18 @@ Files:
             diagnostics += "\nThis is an automated test email from the Instructor Contact System.\n"
             return diagnostics
         except Exception as e:
-            log.error(f"Error gathering diagnostics: {e!s}")
-            return f"Error gathering diagnostics: {e!s}"
+            log.error(f"Error gathering diagnostics: {e}")
+            return f"Error gathering diagnostics: {e}"
 
     def send_test_email(self, *, email: str, logging_level: str) -> str:
         """Send or log a diagnostic test email (depends on DEV_MODE)."""
         if not email or "@" not in email:
             raise ValueError("Please enter a valid email address")
-        if not getattr(self, "email_sender", None):
-            raise RuntimeError("Email sender is not configured")
 
         subject = "Instructor Contact System - Test Email"
         message = self.get_server_diagnostics(logging_level=logging_level)
 
-        if not self.settings.dev_mode:
+        if not self.settings.dev_mode and self.email_sender:
             success = bool(self.email_sender.send(email, subject, message))
             if not success:
                 raise RuntimeError("Failed to send test email")
@@ -363,6 +363,10 @@ Files:
         location_map: dict | None = None,
     ) -> list[str]:
         """Return instructor emails for a building/room."""
+
+        if not self.id_matcher:
+            raise RuntimeError("ID matcher module is not configured")
+
         location_key = f"{building.upper()} {room.upper()}"
         location_map = location_map or self.contact_by_location
         if location_key not in location_map:
@@ -380,6 +384,10 @@ Files:
 
     def lookup_instructor_locations(self, *, email: str) -> list[str]:
         """Return classroom locations for an instructor email."""
+
+        if not self.id_matcher:
+            raise RuntimeError("ID matcher module is not configured")
+
         target_email = (email or "").strip().lower()
         if not target_email:
             raise ValueError("Please enter an email")
@@ -406,6 +414,9 @@ Files:
         location_map: dict | None = None,
     ) -> ClassroomSendResult:
         """Send a message to all instructors scheduled in a classroom."""
+        if not self.id_matcher or not self.email_sender:
+            raise RuntimeError("ID matcher and or email sender module is not configured")
+
         location_key = f"{building.upper()} {room.upper()}"
         location_map = location_map or self.contact_by_location
         if location_key not in location_map:
@@ -426,9 +437,6 @@ Files:
             message = message_template.format(location=location_key)
         except KeyError as ke:
             raise ValueError(f"Missing placeholder in message: {ke}") from ke
-
-        if not getattr(self, "email_sender", None):
-            raise RuntimeError("Email sender is not configured")
 
         sent_count = 0
         failed: list[str] = []
@@ -467,12 +475,17 @@ Files:
         else:
             log.info(f"DEV MODE: Would have sent messages to {emails}")
 
-        self.save_contact_history()
+        if not self.settings.dev_mode:
+            self.save_contact_history()
+
         return ClassroomSendResult(location_key=location_key, sent=sent_count, failed=failed)
 
     def compute_semester_deployment_candidates(self) -> list[dict[str, Any]]:
         """Return instructors that have not yet been contacted this semester."""
         self.load_contact_history()
+
+        if not self.id_matcher or not self.email_sender:
+            raise RuntimeError("ID matcher and or email sender module is not configured")
 
         all_instructors: list[dict[str, Any]] = []
         for emp_id in self.contact_by_instructor:
@@ -506,8 +519,8 @@ Files:
         batch_count = 0
         failed: list[str] = []
 
-        if not getattr(self, "email_sender", None):
-            raise RuntimeError("Email sender is not configured")
+        if not self.id_matcher or not self.email_sender:
+            raise RuntimeError("ID matcher and or email sender module is not configured")
 
         for instructor in instructors[:batch_size]:
             existing = self.contacted_instructors.get(instructor["email"])
@@ -519,14 +532,14 @@ Files:
                 try:
                     message = message_template.format(locations=locations_str)
                 except KeyError as ke:
-                    raise ValueError(f"Missing placeholder in message: {ke!s}") from ke
+                    raise ValueError(f"Missing placeholder in message: {ke}") from ke
                 ok = False
 
                 if not self.settings.dev_mode:
                     try:
                         ok = bool(self.email_sender.send(instructor["email"], subject, message))
                     except Exception as e:
-                        log.error(f"Email send failed to {instructor['email']}: {e!s}")
+                        log.error(f"Email send failed to {instructor['email']}: {e}")
                         failed.append(instructor["email"])
                 else:
                     ok = True
@@ -548,7 +561,8 @@ Files:
                     self.contacted_instructors[instructor["email"]] = existing_record
                     batch_count += 1
 
-        self.save_contact_history()
+        if not self.settings.dev_mode:
+            self.save_contact_history()
 
         # Count only semester-type contacts for accurate remaining calculation
         semester_contacted = sum(
