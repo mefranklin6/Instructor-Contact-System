@@ -25,7 +25,7 @@ from src.plugins.system_plugins import (
 MAX_FAILED_DISPLAY_DEFAULT = 50
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClassroomSendResult:
     """Summary of sending a classroom message."""
 
@@ -34,7 +34,7 @@ class ClassroomSendResult:
     failed: list[str]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DeploymentResult:
     """Summary of a start-of-semester deployment batch."""
 
@@ -108,7 +108,7 @@ class InstructorContactSystemCore:
 
         self._initialize_plugins()
 
-        self.email_sender = email_sender.EmailSender()
+        self.email_sender = email_sender.EmailSender(armed=not self.settings.dev_mode)
 
         if not self.loader:
             raise ModuleNotFoundError("Required module 'loader' missing")
@@ -216,6 +216,29 @@ class InstructorContactSystemCore:
                 mod_time = os.path.getmtime(file_path)
                 return datetime.fromtimestamp(mod_time).isoformat()
 
+            def get_file_size_bytes(file_path: str | None) -> str:
+                if not file_path:
+                    return "Not configured"
+                if not os.path.exists(file_path):
+                    return "File not found"
+                return str(os.path.getsize(file_path))
+
+            def get_json_record_count(file_path: str | None) -> str:
+                if not file_path:
+                    return "Not configured"
+                if not os.path.exists(file_path):
+                    return "File not found"
+                try:
+                    with open(file_path, encoding="utf-8-sig") as f:
+                        payload = json.load(f)
+                    if isinstance(payload, dict):
+                        return str(len(payload))
+                    if isinstance(payload, list):
+                        return str(len(payload))
+                    return "Unknown"
+                except Exception as e:
+                    return f"Error: {e!s}"
+
             generated = datetime.now().isoformat()
 
             schedule_file_path = (
@@ -288,6 +311,12 @@ Files:
                     f"({get_file_mod_time(id_to_email_file_path)})\n"
                 )
 
+            if self.settings.id_to_email_module == "ad_json":
+                diagnostics += (
+                    f"- ID to Email File Size (bytes): {get_file_size_bytes(id_to_email_file_path)}\n"
+                    f"- ID to Email File Records: {get_json_record_count(id_to_email_file_path)}\n"
+                )
+
             if self.settings.supported_locations_mode == "chico":
                 diagnostics += (
                     f"- Supported Locations File: {supported_locations_file_path or 'Not configured'} "
@@ -340,11 +369,11 @@ Files:
             raise KeyError(f"No classes found in {location_key}")
 
         emp_ids = location_map[location_key]
-        emails = [
-            self.id_matcher.match_id_to_email(emp_id)
-            for emp_id in emp_ids
-            if self.id_matcher.match_id_to_email(emp_id)
-        ]
+        emails: list[str] = []
+        for emp_id in emp_ids:
+            email = self.id_matcher.match_id_to_email(emp_id)
+            if email:
+                emails.append(email)
         if not emails:
             raise ValueError("No email matches found for instructors in this location")
         return emails
@@ -396,7 +425,7 @@ Files:
         try:
             message = message_template.format(location=location_key)
         except KeyError as ke:
-            raise ValueError(f"Missing placeholder in message: {ke!s}") from ke
+            raise ValueError(f"Missing placeholder in message: {ke}") from ke
 
         if not getattr(self, "email_sender", None):
             raise RuntimeError("Email sender is not configured")
@@ -413,7 +442,7 @@ Files:
                     ok = bool(self.email_sender.send(email, subject, message))
                     log.info(f"Sent: {email}, subject: {subject}, message: {message}")
                 except Exception as e:
-                    log.error(f"Email send failed to {email}: {e!s}")
+                    log.error(f"Email send failed to {email}: {e}")
 
                 if ok:
                     existing = self.contacted_instructors.get(email, {})
@@ -448,15 +477,21 @@ Files:
         all_instructors: list[dict[str, Any]] = []
         for emp_id in self.contact_by_instructor:
             email = self.id_matcher.match_id_to_email(emp_id)
-            if email and email not in self.contacted_instructors:
-                all_instructors.append(
-                    {
-                        "email": email,
-                        "emp_id": emp_id,
-                        "locations": self.contact_by_instructor[emp_id],
-                        "contacted": False,
-                    }
-                )
+            if not email:
+                continue
+            # Only skip if already contacted for "start of semester" specifically.
+            # Instructors contacted via classroom messages should still be candidates.
+            existing = self.contacted_instructors.get(email)
+            if isinstance(existing, dict) and existing.get("contact_type") == "start of semester":
+                continue
+            all_instructors.append(
+                {
+                    "email": email,
+                    "emp_id": emp_id,
+                    "locations": self.contact_by_instructor[emp_id],
+                    "contacted": False,
+                }
+            )
         return all_instructors
 
     def execute_deployment(
@@ -475,7 +510,11 @@ Files:
             raise RuntimeError("Email sender is not configured")
 
         for instructor in instructors[:batch_size]:
-            if instructor["email"] not in self.contacted_instructors:
+            existing = self.contacted_instructors.get(instructor["email"])
+            already_semester = (
+                isinstance(existing, dict) and existing.get("contact_type") == "start of semester"
+            )
+            if not already_semester:
                 locations_str = ", ".join(instructor["locations"])
                 try:
                     message = message_template.format(locations=locations_str)
@@ -494,25 +533,37 @@ Files:
                     log.info(f"DEV MODE: Would have sent email to {instructor['email']}")
 
                 if ok:
-                    self.contacted_instructors[instructor["email"]] = {
-                        "contacted_at": datetime.now().isoformat(),
-                        "locations": instructor["locations"],
-                        "contact_type": "start of semester",
-                        "message": message,
-                    }
+                    # Merge with existing record to preserve classroom_messages etc.
+                    existing_record = self.contacted_instructors.get(instructor["email"], {})
+                    if not isinstance(existing_record, dict):
+                        existing_record = {}
+                    existing_record.update(
+                        {
+                            "contacted_at": datetime.now().isoformat(),
+                            "locations": instructor["locations"],
+                            "contact_type": "start of semester",
+                            "message": message,
+                        }
+                    )
+                    self.contacted_instructors[instructor["email"]] = existing_record
                     batch_count += 1
 
         self.save_contact_history()
 
-        contacted = len(self.contacted_instructors)
+        # Count only semester-type contacts for accurate remaining calculation
+        semester_contacted = sum(
+            1
+            for info in self.contacted_instructors.values()
+            if isinstance(info, dict) and info.get("contact_type") == "start of semester"
+        )
         total_instructors = sum(
             1 for emp_id in self.contact_by_instructor if self.id_matcher.match_id_to_email(emp_id)
         )
-        remaining = total_instructors - contacted
+        remaining = total_instructors - semester_contacted
 
         return DeploymentResult(
             contacted_this_batch=batch_count,
-            total_contacted=contacted,
+            total_contacted=semester_contacted,
             remaining=remaining,
             failed=failed,
             total_instructors=total_instructors,

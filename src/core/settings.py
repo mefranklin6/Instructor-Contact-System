@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import os
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings for selecting modules and file paths."""
 
