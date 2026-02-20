@@ -312,3 +312,5 @@ pytest -q
 ## Notes / gotchas
 
 - `ad_api` runs PowerShell AD queries and is blocked in Docker by design (see [`src.plugins.system_plugins.create_id_matcher`](src/plugins/system_plugins.py)).
+
+- Stick with one deployment method.  If you mix local Python and Docker, you will have two different 'contact history' logs. In start-of-semester mode, that means instructors could be contacted multiple times.
