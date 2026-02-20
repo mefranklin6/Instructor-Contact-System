@@ -51,7 +51,7 @@ def test_range_data_single_day_includes_only_classes_that_meet_that_day(monkeypa
     )
 
     # Patch CSV loader used by DataLoader.__init__ so no real file is needed.
-    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
 
@@ -75,7 +75,7 @@ def test_range_data_multi_day_window_includes_any_class_meeting_within_window(mo
         ]
     )
 
-    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
 

@@ -138,7 +138,7 @@ See [env.example](env.example) for a starting point.
 
 ## Contributing: Adding a new bundled plugin
 
-1. Add your implementation under [ics_bundled_plugins/](ics_bundled_plugins/__init__.py).
+1. Add your implementation under [plugins/](plugins/__init__.py).
 2. Add a new key branch in [src/plugins/system_plugins.py](src/plugins/system_plugins.py).
 3. Add tests under [tests/](tests/).
 4. Open a PR.
@@ -151,17 +151,17 @@ These keys are wired in [`src.plugins.system_plugins`](src/plugins/system_plugin
 
 ### Supported locations
 
-- `chico` → [ics_bundled_plugins/chico_supported_location_parser.py](ics_bundled_plugins/chico_supported_location_parser.py)
+- `chico` → [plugins/chico_supported_location_parser.py](plugins/chico_supported_location_parser.py)
 
 ### ID→Email matchers
 
-- `zoom_csv` → [ics_bundled_plugins/id_matcher_from_zoom_users.py](ics_bundled_plugins/id_matcher_from_zoom_users.py)
-- `ad_api` → [ics_bundled_plugins/id_matcher_from_ad_api.py](ics_bundled_plugins/id_matcher_from_ad_api.py) (**not Docker compatible**)
-- `ad_json` → [ics_bundled_plugins/id_matcher_from_ad_json.py](ics_bundled_plugins/id_matcher_from_ad_json.py)
+- `zoom_csv` → [plugins/id_matcher_from_zoom_users.py](plugins/id_matcher_from_zoom_users.py)
+- `ad_api` → [plugins/id_matcher_from_ad_api.py](plugins/id_matcher_from_ad_api.py) (**not Docker compatible**)
+- `ad_json` → [plugins/id_matcher_from_ad_json.py](plugins/id_matcher_from_ad_json.py)
 
 ### Schedule loader
 
-- `fl_csv` → [ics_bundled_plugins/fl_data_loader.py](ics_bundled_plugins/fl_data_loader.py)
+- `fl_csv` → [plugins/fl_data_loader.py](plugins/fl_data_loader.py)
 
 ---
 

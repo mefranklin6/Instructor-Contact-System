@@ -3,7 +3,7 @@
 Each `*_module` setting must be a short key for a bundled implementation
 (e.g. `zoom_csv`, `fl_csv`, `chico`).
 
-Bundled implementations live in the optional `ics_bundled_plugins` package.
+Bundled implementations live in the optional `plugins` package.
 To add support for a new data source, submit a PR.
 """
 
@@ -16,17 +16,17 @@ from src.core.settings import Settings
 
 
 def _bundled_import(module_name: str) -> Any:
-    """Import a module from the optional `ics_bundled_plugins` package.
+    """Import a module from the optional `plugins` package.
 
     Raises a clear error if the bundled plugins package is not available.
     """
 
     try:
-        return importlib.import_module(f"ics_bundled_plugins.{module_name}")
+        return importlib.import_module(f"plugins.{module_name}")
     except ModuleNotFoundError as e:
         raise ModuleNotFoundError(
             "Bundled plugin implementations are not installed/available. "
-            "Please ensure the ics_bundled_plugins package is present."
+            "Please ensure the plugins package is present."
         ) from e
 
 

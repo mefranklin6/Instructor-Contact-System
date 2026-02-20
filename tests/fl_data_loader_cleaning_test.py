@@ -43,7 +43,7 @@ def test_clean_dataframe_filters_invalid_rows_and_normalizes_ids(monkeypatch) ->
         ]
     )
 
-    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
     assert loader.clean_df is not None
@@ -71,7 +71,7 @@ def test_convert_dates_parses_primary_and_fallback_formats(monkeypatch) -> None:
         ]
     )
 
-    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
     assert loader.clean_df is not None
@@ -115,7 +115,7 @@ def test_semester_data_filters_to_single_term(monkeypatch) -> None:
         ]
     )
 
-    monkeypatch.setattr("ics_bundled_plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
+    monkeypatch.setattr("plugins.fl_data_loader.csv_to_dataframe", lambda _: df)
 
     loader = DataLoader(fl_file_path="dummy.csv")
 
