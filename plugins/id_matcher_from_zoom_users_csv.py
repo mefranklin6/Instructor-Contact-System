@@ -1,4 +1,4 @@
-"""ID Matcher for Zoom Users CSV exports."""
+"""ID to Email matcher using the Zoom Users CSV export."""
 
 import contextlib
 import logging as log
