@@ -13,6 +13,7 @@ import os
 from typing import Any
 
 from src.core.settings import Settings
+from src.utils import file_is_stale
 
 
 def _bundled_import(module_name: str) -> Any:
@@ -45,6 +46,8 @@ def create_supported_locations(*, settings: Settings) -> Any | None:
             raise FileNotFoundError(
                 "No SUPPORTED_LOCATIONS_FILE_PATH Found. This is a required file for Chico mode"
             )
+        if file_is_stale(settings.supported_locations_file_path):
+            raise RuntimeError("Supported locations file is older than one month. Please update")
 
         parser = slp.SupportedLocationsParser(settings.supported_locations_file_path)
         return parser.run()
@@ -66,6 +69,8 @@ def create_id_matcher(*, settings: Settings, in_docker: bool) -> Any:
 
             if not settings.zoom_csv_path:
                 raise FileNotFoundError("No ZOOM_CSV_PATH found. This is a required file for Zoom CSV mode")
+            if file_is_stale(settings.zoom_csv_path):
+                raise RuntimeError("Zoom Users Report CSV is older than one month. Please update")
             return id_matcher_from_zoom_users_csv.Matcher(csv_file_path=settings.zoom_csv_path)
 
         case "ad_api":
@@ -76,13 +81,8 @@ def create_id_matcher(*, settings: Settings, in_docker: bool) -> Any:
 
         case "ad_json":
             import subprocess
-            import time
 
             _AD_JSON_PATH = "id_and_emails_from_ad.json"
-            _ONE_MONTH_SECONDS = 30 * 24 * 60 * 60
-
-            def _ad_json_is_stale() -> bool:
-                return (time.time() - os.path.getmtime(_AD_JSON_PATH)) > _ONE_MONTH_SECONDS
 
             def _run_ad_query_script() -> None:
                 script_path = os.path.join("scripts", "query_ad.ps1")
@@ -102,7 +102,7 @@ def create_id_matcher(*, settings: Settings, in_docker: bool) -> Any:
 
             json_exists = os.path.exists(_AD_JSON_PATH)
 
-            if json_exists and _ad_json_is_stale():
+            if json_exists and file_is_stale(_AD_JSON_PATH):
                 if in_docker:
                     raise RuntimeError(
                         f"'{_AD_JSON_PATH}' is older than one month. "
@@ -157,6 +157,8 @@ def create_schedule_loader(*, settings: Settings, supported_locations: Any | Non
 
         if not settings.fl_file_path:
             raise FileNotFoundError("No FL_FILE_PATH found. This is a required file for fl_csv mode")
+        if file_is_stale(settings.fl_file_path):
+            raise RuntimeError("FL schedule CSV is older than one month. Please update")
 
         return schedule.DataLoader(
             fl_file_path=settings.fl_file_path,
