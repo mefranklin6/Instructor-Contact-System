@@ -61,11 +61,11 @@ def create_id_matcher(*, settings: Settings, in_docker: bool) -> Any:
         raise ValueError("ID_TO_EMAIL_MODULE is required")
 
     if spec == "zoom_csv":
-        id_matcher_from_zoom_users = _bundled_import("id_matcher_from_zoom_users")
+        id_matcher_from_zoom_users_csv = _bundled_import("id_matcher_from_zoom_users_csv")
 
         if not settings.zoom_csv_path:
             raise FileNotFoundError("No ZOOM_CSV_PATH found. This is a required file for Zoom CSV mode")
-        return id_matcher_from_zoom_users.Matcher(csv_file_path=settings.zoom_csv_path)
+        return id_matcher_from_zoom_users_csv.Matcher(csv_file_path=settings.zoom_csv_path)
 
     if spec == "ad_api":
         if in_docker:
