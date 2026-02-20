@@ -1,4 +1,8 @@
-"""Chico Supported Locations Parser."""
+"""
+Chico Supported Locations Parser.
+
+This module is specific to Chico State's 'Supported Locations' Sharepoint export.
+"""
 
 import logging as log
 import re
