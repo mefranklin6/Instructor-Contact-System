@@ -1,7 +1,13 @@
 # Queries Active Directory for a JSON of EmployeeID and EmailAddress pairing
 
-# Use this script before running the app if ID_TO_EMAIL_MODULE is set to ad_json
-# This is an expensive operation and will take some time depending on your domain size
+<# 
+The result of this script is required when ID_TO_EMAIL_MODULE is set to 'ad_json'
+
+When deploying in Docker, you will need to run this script natively before 'docker compose up'.
+When the tool is deployed in Python on Windows, this script will automatically be called.
+
+
+This is an expensive operation and will take some time depending on your domain size #>
 
 Write-Output 'Gathering AD report to pair EmployeeID to EmailAddress for all active users...'
 Write-Output 'This may take some time, depending on the size of your domain'
