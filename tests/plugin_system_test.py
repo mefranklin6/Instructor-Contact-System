@@ -2,12 +2,12 @@
 
 import pandas as pd
 
-from src.core.settings import Settings
-from src.plugins.system_plugins import (
+from core.system_plugins import (
     create_id_matcher,
     create_schedule_loader,
     create_supported_locations,
 )
+from src.core.settings import Settings
 
 
 def test_builtin_zoom_csv_id_matcher(tmp_path):

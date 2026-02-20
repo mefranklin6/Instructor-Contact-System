@@ -51,7 +51,7 @@ def _load_real_schedule_df() -> pd.DataFrame:
             dtype={"INSTRUCTOR1_EMPLID": "string", "BUILDING": "string", "ROOM": "string"},
         )
     except ValueError as e:
-        pytest.skip(f"Schedule CSV missing required columns: {e!s}")
+        pytest.skip(f"Schedule CSV missing required columns: {e}")
 
     df = df.dropna(subset=["INSTRUCTOR1_EMPLID", "BUILDING", "ROOM"]).copy()
     df["INSTRUCTOR1_EMPLID"] = df["INSTRUCTOR1_EMPLID"].map(_normalize_emplid)

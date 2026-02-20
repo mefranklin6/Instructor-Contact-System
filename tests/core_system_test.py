@@ -264,6 +264,7 @@ def test_compute_semester_deployment_includes_classroom_only_contacts() -> None:
 
 def test_execute_deployment_dev_mode_does_not_send() -> None:
     """In dev mode, deployment logs but does not send real emails."""
+
     df = pd.DataFrame(
         [
             {"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"},
@@ -271,6 +272,9 @@ def test_execute_deployment_dev_mode_does_not_send() -> None:
     )
     mapping = {"000000001": "alice@test.edu"}
     core = _build_core(df, mapping, dev_mode=True)
+
+    if not core.email_sender:
+        raise RuntimeError("Email sender is not configured")
 
     candidates = core.compute_semester_deployment_candidates()
     result = core.execute_deployment(

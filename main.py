@@ -77,7 +77,7 @@ if __name__ == "__main__":
         )
         ft.run(ui.main, port=8080, view=ft.AppView.WEB_BROWSER)
     except Exception as e:
-        log.error(f"Fatal error starting app: {e!s}")
+        log.error(f"Fatal error starting app: {e}")
         if not IN_DOCKER:
             from time import sleep
 

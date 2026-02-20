@@ -288,8 +288,8 @@ class InstructorContactFletApp:
 
                 try:
                     rendered_message = message_input.value.format(location=location_key)
-                except KeyError as ke:
-                    self._show_snack(page, f"Missing placeholder in message: {ke!s}")
+                except KeyError:
+                    self._show_snack(page, f"Missing placeholder in message: {kes}")
                     return
 
                 recipients_text = "\n".join(emails)
@@ -311,10 +311,10 @@ class InstructorContactFletApp:
                             location_map=location_map,
                         )
                     except KeyError as ke:
-                        self._show_snack(page, f"Error: {ke!s}")
+                        self._show_snack(page, f"Error: {ke}")
                         return
                     except Exception as ex:
-                        self._show_snack(page, f"Error: {ex!s}")
+                        self._show_snack(page, f"Error: {ex}")
                         return
 
                     summary = f"""Classroom Message Sent
@@ -582,9 +582,9 @@ Progress: {result.total_contacted}/{result.total_instructors}
                     page.update()
 
                 except ValueError as ve:
-                    self._show_snack(page, f"Invalid batch size: {ve!s}")
+                    self._show_snack(page, f"Invalid batch size: {ve}")
                 except Exception as ex:
-                    self._show_snack(page, f"Error: {ex!s}")
+                    self._show_snack(page, f"Error: {ex}")
 
             return ft.Container(
                 content=ft.Column(
