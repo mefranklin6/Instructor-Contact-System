@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from ics_bundled_plugins.fl_data_loader import DataLoader
+from plugins.fl_data_loader import DataLoader
 
 
 def _row(**overrides: object) -> dict[str, object]:

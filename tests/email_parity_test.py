@@ -201,14 +201,14 @@ def test_real_data_email_parity_by_classroom_to_by_instructor(matcher_factory: s
         json_path = repo_root / "id_and_emails_from_ad.json"
         if not json_path.exists():
             pytest.skip(f"Missing mapping file: {json_path}")
-        from ics_bundled_plugins.id_matcher_from_ad_json import Matcher as AdJsonMatcher
+        from plugins.id_matcher_from_ad_json import Matcher as AdJsonMatcher
 
         matcher = AdJsonMatcher()
     elif matcher_factory == "zoom_csv":
         zoom_path = repo_root / "zoomus_users.csv"
         if not zoom_path.exists():
             pytest.skip(f"Missing mapping file: {zoom_path}")
-        from ics_bundled_plugins.id_matcher_from_zoom_users import Matcher as ZoomMatcher
+        from plugins.id_matcher_from_zoom_users import Matcher as ZoomMatcher
 
         matcher = ZoomMatcher(str(zoom_path))
     else:
