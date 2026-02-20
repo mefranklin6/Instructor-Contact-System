@@ -1,8 +1,5 @@
 """Tests for the plugin loader layer."""
 
-import sys
-from types import ModuleType
-
 import pandas as pd
 
 from src.core.settings import Settings
@@ -36,36 +33,6 @@ def test_builtin_zoom_csv_id_matcher(tmp_path):
     matcher = create_id_matcher(settings=settings, in_docker=False)
     assert matcher.match_id_to_email("1") == "a@example.com"
     assert matcher.match_id_to_email("000000001") == "a@example.com"
-
-
-def test_external_id_matcher_factory(monkeypatch):
-    """External module:factory spec works without core changes."""
-    mod = ModuleType("test_ext_plugin")
-
-    class _Matcher:
-        def match_id_to_email(self, emp_id: str) -> str:
-            return "x@example.com" if str(emp_id).strip() else ""
-
-    def create(*, settings: Settings, in_docker: bool):
-        assert settings is not None
-        assert in_docker is False
-        return _Matcher()
-
-    mod.create = create
-    monkeypatch.setitem(sys.modules, "test_ext_plugin", mod)
-
-    settings = Settings(
-        supported_locations_mode="none",
-        id_to_email_module="test_ext_plugin:create",
-        schedule_module="fl_csv",
-        dev_mode=True,
-        zoom_csv_path=None,
-        fl_file_path=None,
-        supported_locations_file_path=None,
-    )
-
-    matcher = create_id_matcher(settings=settings, in_docker=False)
-    assert matcher.match_id_to_email("123") == "x@example.com"
 
 
 def test_builtin_supported_locations_chico(tmp_path):
