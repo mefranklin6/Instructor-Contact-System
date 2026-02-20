@@ -1,4 +1,8 @@
-"""Data loader for FacilitiesLink schedule CSV exports."""
+"""
+Data loader for FacilitiesLink schedule CSV exports.
+
+For CSU Campuses, this is the file that is exported from PeopleSoft to FacilitiesLink
+"""
 
 from datetime import datetime, timedelta
 import logging as log
