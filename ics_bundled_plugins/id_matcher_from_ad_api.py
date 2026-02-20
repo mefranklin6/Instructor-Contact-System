@@ -57,15 +57,14 @@ class Matcher:
                 timeout=300,
             )
         except subprocess.TimeoutExpired:
-            log.error("PowerShell query timed out after 300 seconds")
-            return [] if return_type == "list" else ""
+            log.error("PowerShell query timed out")
+            raise
         except Exception as e:
             log.error(f"Failed to execute PowerShell query: {e}")
-            return [] if return_type == "list" else ""
-
+            raise
         if result.returncode != 0:
             log.error(f"PowerShell command failed with return code {result.returncode}: {result.stderr}")
-            return [] if return_type == "list" else ""
+            raise
 
         if return_type == "list":
             stdout = (result.stdout or "").strip()
@@ -80,7 +79,7 @@ class Matcher:
             except json.JSONDecodeError as e:
                 log.error(f"Failed to parse JSON from PowerShell output: {e}")
                 log.debug(f"Raw PowerShell stdout: {stdout[:500]}")
-                return []
+                raise
 
         return (result.stdout or "").strip()
 
