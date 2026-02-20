@@ -5,7 +5,7 @@ import logging as log
 
 import pandas as pd
 
-from src.utils import csv_to_dataframe, raise_error_window
+from src.utils import csv_to_dataframe
 
 
 class DataLoader:
@@ -34,45 +34,36 @@ class DataLoader:
 
     def range_data(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """Return schedule rows that meet at least once within [start_date, end_date]."""
-        try:
-            if self.clean_df is None:
-                log.error("Failed to load clean dataframe")
-                return pd.DataFrame()
-
-            start = pd.to_datetime(start_date).normalize()
-            end = pd.to_datetime(end_date).normalize()
-
-            if start > end:
-                raise ValueError("start_date must be less than or equal to end_date.")
-
-            log.info(f"Loading data from {self.file_path}")
-            log.info(f"Filtering to date range: {start.date()} to {end.date()}")
-            df = self.clean_df.copy()
-
-            before_rows = len(df)
-            log.info(f"Total rows before date filtering: {before_rows}")
-
-            filtered = self._expand_to_meeting_dates(df, start, end)
-
-            if filtered.empty:
-                log.info("No classes meet within the specified date range")
-                return pd.DataFrame()
-
-            log.info(
-                f"Filtered to date range {start.date()} - {end.date()}. "
-                f"Rows before: {before_rows}, Rows after: {len(filtered)}"
-            )
-            log.info(f"Unique locations after filter: {len(filtered.groupby(['BUILDING', 'ROOM']))}")
-
-            return filtered
-
-        except Exception as e:
-            raise_error_window(
-                f"An error occurred while filtering to date range: {e!s}",
-                title="Range Filtering Error",
-            )
-            log.error(f"Range filtering error: {e!s}")
+        if self.clean_df is None:
+            log.error("Failed to load clean dataframe")
             return pd.DataFrame()
+
+        start = pd.to_datetime(start_date).normalize()
+        end = pd.to_datetime(end_date).normalize()
+
+        if start > end:
+            raise ValueError("start_date must be less than or equal to end_date.")
+
+        log.info(f"Loading data from {self.file_path}")
+        log.info(f"Filtering to date range: {start.date()} to {end.date()}")
+        df = self.clean_df.copy()
+
+        before_rows = len(df)
+        log.info(f"Total rows before date filtering: {before_rows}")
+
+        filtered = self._expand_to_meeting_dates(df, start, end)
+
+        if filtered.empty:
+            log.info("No classes meet within the specified date range")
+            return pd.DataFrame()
+
+        log.info(
+            f"Filtered to date range {start.date()} - {end.date()}. "
+            f"Rows before: {before_rows}, Rows after: {len(filtered)}"
+        )
+        log.info(f"Unique locations after filter: {len(filtered.groupby(['BUILDING', 'ROOM']))}")
+
+        return filtered
 
     def _expand_to_meeting_dates(
         self, df: pd.DataFrame, start_date: pd.Timestamp, end_date: pd.Timestamp
@@ -134,77 +125,61 @@ class DataLoader:
 
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame | None:
         """Drop invalid rows and normalize key fields."""
-        try:
-            initial_rows = len(df)
-            required_columns = [
-                "INSTRUCTOR1_EMPLID",
-                "CLASS_START_DATE",
-                "CLASS_END_DATE",
-                "START_TIME1",
-                "END_TIME1",
-                "DAYS1",
-                "BUILDING",
-                "ROOM",
-            ]
-            filtered_df = df.dropna(subset=required_columns)
-            filtered_df = filtered_df[filtered_df["ROOM"] != "WWW"]
-            filtered_df = filtered_df[filtered_df["BUILDING"] != "WWW"]
-            filtered_df = filtered_df[filtered_df["ROOM"] != "ONLINE"]
-            filtered_df = filtered_df[filtered_df["BUILDING"] != "ONLINE"]
-            filtered_df = filtered_df[filtered_df["DAYS1"] != "TBA"]
+        initial_rows = len(df)
+        required_columns = [
+            "INSTRUCTOR1_EMPLID",
+            "CLASS_START_DATE",
+            "CLASS_END_DATE",
+            "START_TIME1",
+            "END_TIME1",
+            "DAYS1",
+            "BUILDING",
+            "ROOM",
+        ]
+        filtered_df = df.dropna(subset=required_columns)
+        filtered_df = filtered_df[filtered_df["ROOM"] != "WWW"]
+        filtered_df = filtered_df[filtered_df["BUILDING"] != "WWW"]
+        filtered_df = filtered_df[filtered_df["ROOM"] != "ONLINE"]
+        filtered_df = filtered_df[filtered_df["BUILDING"] != "ONLINE"]
+        filtered_df = filtered_df[filtered_df["DAYS1"] != "TBA"]
 
-            filtered_df["INSTRUCTOR1_EMPLID"] = filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
-            filtered_df = filtered_df[
-                filtered_df["INSTRUCTOR1_EMPLID"].str.replace(".", "", regex=False).str.isdigit()
-            ]
-            filtered_df["INSTRUCTOR1_EMPLID"] = (
-                filtered_df["INSTRUCTOR1_EMPLID"].astype(str).astype(int).astype(str).str.zfill(9)
-            )
+        filtered_df["INSTRUCTOR1_EMPLID"] = filtered_df["INSTRUCTOR1_EMPLID"].astype(str).str.strip()
+        filtered_df = filtered_df[
+            filtered_df["INSTRUCTOR1_EMPLID"].str.replace(".", "", regex=False).str.isdigit()
+        ]
+        filtered_df["INSTRUCTOR1_EMPLID"] = (
+            filtered_df["INSTRUCTOR1_EMPLID"].astype(float).astype(int).astype(str).str.zfill(9)
+        )
 
-            log.debug(
-                f"{initial_rows - len(filtered_df)} rows initially cleansed. "
-                f"Initial size: {initial_rows}, Filtered size: {len(filtered_df)}"
-            )
-            return filtered_df
-        except Exception as e:
-            raise_error_window(
-                f"An error occurred while filtering the data: {e!s}",
-                title="Filtering Error",
-            )
-            log.error(f"Filtering error: {e!s}")
-            return None
+        log.debug(
+            f"{initial_rows - len(filtered_df)} rows initially cleansed. "
+            f"Initial size: {initial_rows}, Filtered size: {len(filtered_df)}"
+        )
+        return filtered_df
 
     def _convert_dates(self, df: pd.DataFrame) -> pd.DataFrame | None:
         """Convert FacilitiesLink date columns to pandas datetimes."""
-        try:
-            start = pd.to_datetime(df["CLASS_START_DATE"], format="%d-%b-%y", errors="coerce")
-            end = pd.to_datetime(df["CLASS_END_DATE"], format="%d-%b-%y", errors="coerce")
+        start = pd.to_datetime(df["CLASS_START_DATE"], format="%d-%b-%y", errors="coerce")
+        end = pd.to_datetime(df["CLASS_END_DATE"], format="%d-%b-%y", errors="coerce")
 
-            if start.isna().any():
-                start_fallback = pd.to_datetime(df.loc[start.isna(), "CLASS_START_DATE"], errors="coerce")
-                start.loc[start.isna()] = start_fallback
-            if end.isna().any():
-                end_fallback = pd.to_datetime(df.loc[end.isna(), "CLASS_END_DATE"], errors="coerce")
-                end.loc[end.isna()] = end_fallback
+        if start.isna().any():
+            start_fallback = pd.to_datetime(df.loc[start.isna(), "CLASS_START_DATE"], errors="coerce")
+            start.loc[start.isna()] = start_fallback
+        if end.isna().any():
+            end_fallback = pd.to_datetime(df.loc[end.isna(), "CLASS_END_DATE"], errors="coerce")
+            end.loc[end.isna()] = end_fallback
 
-            df["CLASS_START_DATE"] = start
-            df["CLASS_END_DATE"] = end
+        df["CLASS_START_DATE"] = start
+        df["CLASS_END_DATE"] = end
 
-            if df["CLASS_START_DATE"].isna().any() or df["CLASS_END_DATE"].isna().any():
-                bad_start = int(df["CLASS_START_DATE"].isna().sum())
-                bad_end = int(df["CLASS_END_DATE"].isna().sum())
-                raise ValueError(
-                    f"Unparseable dates: CLASS_START_DATE NaT={bad_start}, CLASS_END_DATE NaT={bad_end}"
-                )
-
-            return df
-        except Exception as e:
-            raise_error_window(
-                f"An error occurred while converting dates: {e!s}",
-                title="Date Conversion Error",
+        if df["CLASS_START_DATE"].isna().any() or df["CLASS_END_DATE"].isna().any():
+            bad_start = int(df["CLASS_START_DATE"].isna().sum())
+            bad_end = int(df["CLASS_END_DATE"].isna().sum())
+            raise ValueError(
+                f"Unparseable dates: CLASS_START_DATE NaT={bad_start}, CLASS_END_DATE NaT={bad_end}"
             )
-            log.error(f"Date conversion error: {e!s}")
-            return None
+
+        return df
 
     def _filter_to_supported_locations(self, df: pd.DataFrame) -> pd.DataFrame:
         """Filter schedule to only explicitly supported (building, room) tuples."""
