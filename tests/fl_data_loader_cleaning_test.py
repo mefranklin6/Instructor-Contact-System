@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from plugins.fl_data_loader import DataLoader
+from plugins.fl_data_loader import DataLoader  # pyright: ignore[reportMissingImports]
 
 
 def _row(**overrides: object) -> dict[str, object]:
