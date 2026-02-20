@@ -8,8 +8,12 @@ import smtplib
 class EmailSender:
     """Handles sending emails using SMTP."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, armed: bool = False) -> None:
         """Initialize the EmailSender with SMTP configuration from environment variables."""
+
+        # Secondary safety control for testing to make sure we don't actually send emails.
+        self.armed = armed
+
         self.smtp_host = os.getenv("SMTP_HOST", "")
         self.smtp_port = int(os.getenv("SMTP_PORT", 587))
         self.smtp_from = os.getenv("SMTP_FROM", "")
@@ -20,7 +24,7 @@ class EmailSender:
             log.error("SMTP_HOST and SMTP_FROM environment variables must be set.")
             raise ValueError("Missing required SMTP configuration.")
 
-    def send(self, to_addr, subject, message) -> bool:
+    def send(self, to_addr: str, subject: str, message: str) -> bool:
         """Send an email.
 
         Args:
@@ -31,6 +35,9 @@ class EmailSender:
         Returns:
             True if the email was sent successfully, False otherwise.
         """
+        if not self.armed:
+            return True
+
         message = f"""From: {self.smtp_from}
 To: {to_addr}
 Subject: {subject}
