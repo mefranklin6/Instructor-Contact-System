@@ -13,14 +13,15 @@ from typing import Any
 
 import pandas as pd
 
-from core.system_plugins import (
+from src import email_sender
+from src.core.schedule_aggregator import Aggregator
+from src.core.settings import Settings
+
+from .system_plugins import (
     create_id_matcher,
     create_schedule_loader,
     create_supported_locations,
 )
-from src import email_sender
-from src.core.schedule_aggregator import Aggregator
-from src.core.settings import Settings
 
 MAX_FAILED_DISPLAY_DEFAULT = 50
 
