@@ -10,11 +10,11 @@ import time
 import pandas as pd
 import pytest
 
-from core.system_plugins import (
+from src.core.settings import Settings
+from src.core.system_plugins import (
     create_id_matcher,
     create_schedule_loader,
 )
-from src.core.settings import Settings
 from src.utils import file_is_stale
 
 # ---------------------------------------------------------------------------
