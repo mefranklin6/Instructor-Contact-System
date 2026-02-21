@@ -1,5 +1,6 @@
 [tool.ruff]
 line-length = 110
+exclude = ["generate_demo_data.py"]
 
 [tool.ruff.lint]
 select = [
