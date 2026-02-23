@@ -4,6 +4,7 @@ An automated instructor lookup and contact system designed to support higher edu
 
 ## Overview
 
+![picture of start of semester interface](/images/start_of_semester.png)
 This system enables technicians to quickly identify and contact instructors based on where and when they teach.
 
 The system is designed to ensure reliable classroom environments by making it easier to communicate proactively and reactively with instructors across campus.
@@ -26,9 +27,11 @@ The system supports communication in two directions:
 
 1. **Room → Instructors**  
    Contact all instructors scheduled to teach in a specific classroom or group of classrooms within a defined time window.
+![rooms per instructor interface](/images/by_instructor.png)
 
 2. **Instructor → Rooms**  
    Identify all rooms an instructor is scheduled to teach in and tailor communication accordingly.
+![instructor to room interface](/images/by_classroom.png)
 
 ## Features
 
