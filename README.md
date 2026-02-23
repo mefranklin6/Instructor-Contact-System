@@ -81,7 +81,9 @@ Plugins:
 
 - The CSV that is exported from PeopleSoft and ingested by MetaBIM Facilities Link
 
-### Employee ID to Email key (required)
+### Employee ID to Email key (required if not in calendar data)
+
+If using FacilitiesLink import file, you will only find Employee ID's there and need this module to map ID's to emails.
 
 Plugins:
 
@@ -89,7 +91,7 @@ Plugins:
 
 - **Active Directory API**: Live queries AD for the ID to Email keys. Note: Is not compatible with running in Docker. Must run on a domain-joined workstation with proper privileges and RSAT.
 
-- **Active Directory JSON**: Use a script to generate an AD report. The system will use the saved file as the data source.
+- **Active Directory JSON**: Use a script to generate an AD report. The system will use the saved file as the data source. If running in docker, you'll need to run the [script](scripts/query_ad.ps1) on a Windows workstation first.
 
 ### Supported Locations (for now, Chico only and fully optional)
 
