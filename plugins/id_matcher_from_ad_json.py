@@ -20,10 +20,12 @@ class Matcher:
     def _normalize_employee_id(employee_id: object) -> str:
         """Normalize an EmployeeID to a 9-digit, zero-padded string when numeric."""
         if employee_id is None:
+            log.warning("Received None for EmployeeID, returning empty string")
             return ""
 
         value = str(employee_id).strip()
         if not value:
+            log.warning("Received empty string for EmployeeID, returning empty string")
             return ""
 
         return value.zfill(9) if value.isdigit() else value
@@ -51,6 +53,7 @@ class Matcher:
         """Return the email for `id`, or an empty string if not found."""
         normalized_id = self._normalize_employee_id(id)
         if not normalized_id:
+            log.warning("Received empty or invalid EmployeeID, returning empty string")
             return ""
 
         if self._id_to_email is not None and normalized_id in self._id_to_email:
