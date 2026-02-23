@@ -492,6 +492,7 @@ Files:
         for emp_id in self.contact_by_instructor:
             email = self.id_matcher.match_id_to_email(emp_id)
             if not email:
+                log.warning(f"No email match for emp_id {emp_id}; skipping in deployment candidate list")
                 continue
             # Only skip if already contacted for "start of semester" specifically.
             # Instructors contacted via classroom messages should still be candidates.
