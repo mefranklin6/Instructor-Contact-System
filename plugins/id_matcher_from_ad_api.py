@@ -1,5 +1,6 @@
 """Active Directory API matcher for EmployeeID -> EmailAddress."""
 
+from enum import Enum, auto
 import json
 import logging as log
 import subprocess
@@ -29,19 +30,27 @@ class Matcher:
         self._id_to_email: dict[str, str] | None = None
         self._load_all_id_and_email_map()
 
+    class ReturnType(Enum):
+        """Return types for PowerShell queries."""
+
+        LIST = auto()
+        STRING = auto()
+
     @staticmethod
     def _normalize_employee_id(employee_id: object) -> str:
         """Normalize an EmployeeID to a 9-digit, zero-padded string when numeric."""
         if employee_id is None:
+            log.info("Received None for EmployeeID, returning empty string")
             return ""
 
         value = str(employee_id).strip()
         if not value:
+            log.info("Received empty string for EmployeeID, returning empty string")
             return ""
 
         return value.zfill(9) if value.isdigit() else value
 
-    def _pwsh_query(self, query: str, return_type: str) -> list[dict[str, str]] | str:
+    def _pwsh_query(self, query: str, return_type: ReturnType) -> list[dict[str, str]] | str:
         """Execute a PowerShell query and return the parsed output."""
         try:
             result = subprocess.run(
@@ -66,7 +75,7 @@ class Matcher:
             log.error(f"PowerShell command failed with return code {result.returncode}: {result.stderr}")
             raise
 
-        if return_type == "list":
+        if return_type == self.ReturnType.LIST:
             stdout = (result.stdout or "").strip()
             if not stdout:
                 log.warning("PowerShell returned empty output for list query")
@@ -86,7 +95,7 @@ class Matcher:
     def _load_all_id_and_email_map(self) -> None:
         """Load all EmployeeID->EmailAddress pairs into a dict cache."""
         log.info("Querying Active Directory for all Employee IDs and email addresses...")
-        data = self._pwsh_query(self.all_query, "list")
+        data = self._pwsh_query(self.all_query, self.ReturnType.LIST)
 
         if not isinstance(data, list):
             log.error("Failed to retrieve data from Active Directory")
@@ -100,6 +109,8 @@ class Matcher:
                 email = str(item["EmailAddress"]).strip()
                 if emp_id and email:
                     self._id_to_email[emp_id] = email
+            else:
+                log.error("Error validating all_id_and_email_map while loading")
 
         log.info(f"Successfully loaded {len(self._id_to_email)} Employee ID to email mappings")
 
@@ -113,17 +124,19 @@ class Matcher:
             return self._id_to_email[normalized_id]
 
         safe_id = normalized_id.replace('"', '""')
-        result = self._pwsh_query(self.single_query.format(id=safe_id), "str")
+        result = self._pwsh_query(self.single_query.format(id=safe_id), self.ReturnType.STRING)
 
         if result and isinstance(result, str):
             result = next((line.strip() for line in result.splitlines() if line.strip()), "")
             if not result:
+                log.warning(f"No email found for EmployeeID {normalized_id} in single query")
                 return ""
             if self._id_to_email is None:
                 self._id_to_email = {}
             self._id_to_email[normalized_id] = result
             return result
 
+        log.warning(f"PowerShell query returned no valid email for EmployeeID {normalized_id}")
         return ""
 
 
