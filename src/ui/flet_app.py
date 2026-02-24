@@ -276,10 +276,10 @@ class InstructorContactFletApp:
                 emp_ids = location_map[location_key]
                 emails = []
                 for emp_id in emp_ids:
-                    email = self.core.id_matcher.match_id_to_email(emp_id)
-                    if email:
-                        emails.append(email)
-
+                    if self.core.id_matcher:
+                        email = self.core.id_matcher.match_id_to_email(emp_id)
+                        if email:
+                            emails.append(email)
                 emails = self.core.dedupe_emails(emails)
 
                 if not emails:
@@ -288,8 +288,8 @@ class InstructorContactFletApp:
 
                 try:
                     rendered_message = message_input.value.format(location=location_key)
-                except KeyError:
-                    self._show_snack(page, f"Missing placeholder in message: {kes}")
+                except KeyError as ke:
+                    self._show_snack(page, f"Missing placeholder in message: {ke}")
                     return
 
                 recipients_text = "\n".join(emails)
