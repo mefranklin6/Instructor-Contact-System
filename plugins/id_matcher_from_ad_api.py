@@ -129,14 +129,14 @@ class Matcher:
         if result and isinstance(result, str):
             result = next((line.strip() for line in result.splitlines() if line.strip()), "")
             if not result:
-                log.warning(f"No email found for EmployeeID {normalized_id} in single query")
+                log.warning("No email found for EmployeeID *redacted* in single query")
                 return ""
             if self._id_to_email is None:
                 self._id_to_email = {}
             self._id_to_email[normalized_id] = result
             return result
 
-        log.warning(f"PowerShell query returned no valid email for EmployeeID {normalized_id}")
+        log.warning("PowerShell query returned no valid email for EmployeeID *redacted*")
         return ""
 
 

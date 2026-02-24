@@ -33,7 +33,7 @@ class Matcher:
 
         mapping = df.set_index("Employee ID")["Email"].to_dict()
         log.info(f"Loaded {len(mapping)} ID to email mappings")
-        return mapping
+        return mapping  # type: ignore
 
     def _normalize_emp_id(self, emp_id: object) -> str:
         if emp_id is None:

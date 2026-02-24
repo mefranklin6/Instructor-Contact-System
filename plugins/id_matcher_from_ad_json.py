@@ -59,7 +59,7 @@ class Matcher:
         if self._id_to_email is not None and normalized_id in self._id_to_email:
             return self._id_to_email[normalized_id]
 
-        log.warning(f"No email found for Employee ID: {normalized_id}")
+        log.warning("No email found for Employee ID: *redacted*")
         return ""
 
 
