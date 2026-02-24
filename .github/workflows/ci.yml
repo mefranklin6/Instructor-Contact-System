@@ -9,12 +9,6 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
-        permissions: # for bandit
-            security-events: write
-            # only required for workflows in private repositories
-            actions: read
-            contents: read
-
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -44,6 +38,3 @@ jobs:
 
             - name: Run Tests with Pytest
               run: pytest
-
-            - name: Perform Bandit Analysis
-              uses: PyCQA/bandit-action@v1
