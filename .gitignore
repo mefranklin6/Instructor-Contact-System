@@ -213,3 +213,6 @@ tmpclaude-*
 *.csv
 *.json
 messages.py
+
+# Re-include specific project config files
+!.markdownlint.json
