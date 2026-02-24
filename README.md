@@ -61,6 +61,10 @@ The system supports communication in two directions:
 - Provide scalable communication tools as campus grows  
 - Support reliable teaching and learning environments  
 
+## Security
+
+This system was built to exceed the appropriate California State University system-wide security policies when used with only level 3 data and when executed on CSU owned workstations that meet minimum security hardening criteria. The continuous integration (CI) pipeline uses Github actions for code scanning, secret scanning, and dependency vulnerability tracking. These actions are both ongoing and are executed upon every push or pull request. Any test failure will stop a push or pull request.
+
 ## System Requirements
 
 This system can run in either Docker or Python.
@@ -162,6 +166,9 @@ App will be available at `http://localhost:8080`.
 
 - Ruff formatter and linter
 - PEP 8
+- David Anson's markdownlint for the readme
+- *No level 1 or 2 data sources*. If your source includes these, please cleanse the data before it touches the app.
+- No credentials, secrets, or campus-specific data to be committed to the repo.
 
 ## Contributing: Adding a new bundled plugin
 
@@ -205,6 +212,8 @@ Add tests under [`tests/`](tests/) covering:
 - Any loader-specific behavior (see [`tests/fl_data_loader_cleaning_test.py`](tests/fl_data_loader_cleaning_test.py), [`tests/fl_date_range_filtering_test.py`](tests/fl_date_range_filtering_test.py))
 
 ### 5) Run lint and tests
+
+These tests will be ran by the CI upon creating a pull request, but you can run the below commands to check before making a pull request if you like:
 
 ```powershell
 ruff format .
