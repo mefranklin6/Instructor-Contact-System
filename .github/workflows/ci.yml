@@ -9,6 +9,11 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
+        permissions: # for bandit
+            security-events: write
+            # only required for workflows in private repositories
+            actions: read
+            contents: read
 
         steps:
             - name: Checkout code
@@ -31,5 +36,14 @@ jobs:
             - name: Run Ruff Format (Formatting)
               run: ruff format .
 
+            - name: Run Markdown Linter and fix if possible
+              uses: DavidAnson/markdownlint-cli2-action@main
+              with:
+                  fix: true
+                  globs: "**/*.md"
+
             - name: Run Tests with Pytest
               run: pytest
+
+            - name: Perform Bandit Analysis
+              uses: PyCQA/bandit-action@v1
