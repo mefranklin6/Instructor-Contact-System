@@ -29,14 +29,20 @@ class FakeEmailSender:
 
     def __init__(self, *, should_fail: set[str] | None = None) -> None:
         """Create a fake sender; optionally specify emails that should fail."""
-        self.sent: list[tuple[str, str, str]] = []
+        self.sent: list[tuple[str, str, str, list[str]]] = []
         self._should_fail = should_fail or set()
 
-    def send(self, to_addr: str, subject: str, message: str) -> bool:
+    def send(
+        self,
+        to_addr: str,
+        subject: str,
+        message: str,
+        cc_addrs: list[str] | None = None,
+    ) -> bool:
         """Record the send attempt and return success/failure."""
         if to_addr in self._should_fail:
             return False
-        self.sent.append((to_addr, subject, message))
+        self.sent.append((to_addr, subject, message, list(cc_addrs or [])))
         return True
 
 
@@ -144,6 +150,61 @@ def test_lookup_classroom_emails_no_email_match_raises() -> None:
 
     with pytest.raises(ValueError, match="No email matches"):
         core.lookup_classroom_emails(building="SCI", room="101")
+
+
+def test_parse_email_addresses_supports_common_separators() -> None:
+    """parse_email_addresses splits, trims, and deduplicates CC input."""
+    result = InstructorContactSystemCore.parse_email_addresses(
+        " first@test.edu, second@test.edu; third@test.edu\nfirst@test.edu "
+    )
+
+    assert result == ["first@test.edu", "second@test.edu", "third@test.edu"]
+
+
+def test_send_message_to_classroom_passes_cc_addresses() -> None:
+    """Classroom sends include CC recipients for each outbound email."""
+    df = pd.DataFrame(
+        [
+            {"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"},
+            {"INSTRUCTOR1_EMPLID": "000000002", "BUILDING": "SCI", "ROOM": "101"},
+        ]
+    )
+    mapping = {
+        "000000001": "alice@test.edu",
+        "000000002": "bob@test.edu",
+    }
+    core = _build_core(df, mapping, dev_mode=False)
+
+    result = core.send_message_to_classroom(
+        building="SCI",
+        room="101",
+        subject="Projector update",
+        message_template="Hello from {location}",
+        cc_addresses=["support@test.edu", "manager@test.edu", "support@test.edu"],
+    )
+
+    assert result.sent == 2
+    if not core.email_sender:
+        raise RuntimeError("Email sender is not configured")
+
+    assert core.email_sender.sent == [
+        (
+            "alice@test.edu",
+            "Projector update",
+            "Hello from SCI 101",
+            ["support@test.edu", "manager@test.edu"],
+        ),
+        (
+            "bob@test.edu",
+            "Projector update",
+            "Hello from SCI 101",
+            ["support@test.edu", "manager@test.edu"],
+        ),
+    ]
+    assert core.contacted_instructors["alice@test.edu"]["classroom_messages"][0]["cc"] == [
+        "support@test.edu",
+        "manager@test.edu",
+    ]
 
 
 # ---- By Instructor ----
