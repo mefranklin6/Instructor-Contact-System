@@ -184,6 +184,14 @@ class InstructorContactFletApp:
                 prefix_icon=ft.Icons.SUBJECT,
             )
 
+            cc_input = ft.TextField(
+                label="CC:",
+                width=720,
+                prefix_icon=ft.Icons.COPY,
+                hint_text="Optional: comma-separated email addresses",
+                keyboard_type=ft.KeyboardType.EMAIL,
+            )
+
             message_input = ft.TextField(
                 label="Message template",
                 value=self.default_room_contact_message,
@@ -292,10 +300,14 @@ class InstructorContactFletApp:
                     self._show_snack(page, f"Missing placeholder in message: {ke}")
                     return
 
+                cc_addresses = self.core.parse_email_addresses(cc_input.value)
+                cc_text = ", ".join(cc_addresses) if cc_addresses else "None"
+
                 recipients_text = "\n".join(emails)
                 confirm_body = (
                     f"Are you sure you want to send this message to these recipients?\n\n"
                     f"Subject:\n{subject_input.value}\n\n"
+                    f"CC:\n{cc_text}\n\n"
                     f"Message:\n{rendered_message}\n\n"
                     f"Recipients ({len(emails)}):\n{recipients_text}"
                 )
@@ -308,6 +320,7 @@ class InstructorContactFletApp:
                             room=room_input.value,
                             subject=subject_input.value,
                             message_template=message_input.value,
+                            cc_addresses=cc_addresses,
                             location_map=location_map,
                         )
                     except KeyError as ke:
@@ -420,6 +433,10 @@ Failed: {len(result.failed)}
                         ft.Container(
                             content=subject_input,
                             padding=ft.Padding(top=24, left=0, right=0, bottom=0),
+                        ),
+                        ft.Container(
+                            content=cc_input,
+                            padding=ft.Padding(top=12, left=0, right=0, bottom=0),
                         ),
                         ft.Container(
                             content=message_input,
