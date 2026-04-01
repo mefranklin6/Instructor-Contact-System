@@ -138,6 +138,19 @@ class InstructorContactSystemCore:
         seen: set[str] = set()
         return [e for e in emails if not (e in seen or seen.add(e))]
 
+    @staticmethod
+    def parse_email_addresses(value: str | None) -> list[str]:
+        """Parse comma, semicolon, or newline separated email addresses."""
+        if not value:
+            return []
+
+        normalized = value.replace("\r", "\n")
+        for separator in (";", "\n"):
+            normalized = normalized.replace(separator, ",")
+
+        emails = [email.strip() for email in normalized.split(",") if email.strip()]
+        return InstructorContactSystemCore.dedupe_emails(emails)
+
     def get_aggregated_data_for_date_range(
         self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> tuple[dict, dict]:
@@ -412,6 +425,7 @@ Files:
         room: str,
         subject: str,
         message_template: str,
+        cc_addresses: list[str] | None = None,
         location_map: dict | None = None,
     ) -> ClassroomSendResult:
         """Send a message to all instructors scheduled in a classroom."""
@@ -439,6 +453,10 @@ Files:
         except KeyError as ke:
             raise ValueError(f"Missing placeholder in message: {ke}") from ke
 
+        cc_addresses = self.dedupe_emails(
+            [address.strip() for address in (cc_addresses or []) if address.strip()]
+        )
+
         sent_count = 0
         failed: list[str] = []
 
@@ -448,8 +466,14 @@ Files:
             for email in emails:
                 ok = False
                 try:
-                    ok = bool(self.email_sender.send(email, subject, message))
-                    log.info(f"Sent: {email}, subject: {subject}, message: {message}")
+                    ok = bool(self.email_sender.send(email, subject, message, cc_addrs=cc_addresses))
+                    log.info(
+                        "Sent: %s, subject: %s, cc: %s, message: %s",
+                        email,
+                        subject,
+                        cc_addresses,
+                        message,
+                    )
                 except Exception as e:
                     log.error(f"Email send failed to {email}: {e}")
 
@@ -466,6 +490,7 @@ Files:
                             "locations": location_key,
                             "contact_type": "all instructors for classroom",
                             "message": message,
+                            "cc": cc_addresses,
                         }
                     )
                     existing["classroom_messages"] = history
@@ -474,7 +499,7 @@ Files:
                 else:
                     failed.append(email)
         else:
-            log.info(f"DEV MODE: Would have sent messages to {emails}")
+            log.info("DEV MODE: Would have sent messages to %s with cc %s", emails, cc_addresses)
 
         if not self.settings.dev_mode:
             self.save_contact_history()
