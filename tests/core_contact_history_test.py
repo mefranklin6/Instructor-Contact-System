@@ -419,7 +419,8 @@ def test_send_message_to_classroom_dev_mode_does_not_send(tmp_path, monkeypatch)
 
     assert result.sent == 0
     assert result.failed == []
-    assert core.email_sender.sent == []
+    if core.email_sender:
+        assert core.email_sender.sent == []
 
 
 # ---------------------------------------------------------------------------

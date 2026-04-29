@@ -51,7 +51,7 @@ class Matcher:
             return ""
         return s.zfill(9)
 
-    def match_id_to_email(self, emp_id: str) -> str:
+    def match_id_to_email(self, emp_id: str | None) -> str:
         """Return the email for `emp_id`, or an empty string if not found."""
         normalized = self._normalize_emp_id(emp_id)
         if not normalized:

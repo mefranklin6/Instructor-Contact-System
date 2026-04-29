@@ -2,6 +2,7 @@
 
 import os
 import time
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -11,7 +12,7 @@ from src.core.system_plugins import create_id_matcher, create_schedule_loader, c
 
 
 def _settings(**overrides):
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         supported_locations_mode="none",
         id_to_email_module="none",
         schedule_module="none",

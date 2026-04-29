@@ -49,7 +49,7 @@ class Matcher:
 
         log.info(f"Successfully loaded {len(self._id_to_email)} Employee ID to email mappings")
 
-    def match_id_to_email(self, id: str) -> str:
+    def match_id_to_email(self, id: str | None) -> str:
         """Return the email for `id`, or an empty string if not found."""
         normalized_id = self._normalize_employee_id(id)
         if not normalized_id:
