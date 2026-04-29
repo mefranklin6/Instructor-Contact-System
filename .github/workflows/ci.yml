@@ -31,7 +31,7 @@ jobs:
               run: ruff check --fix .
 
             - name: Run Ruff Format (Formatting)
-              run: ruff format --fix .
+              run: ruff format .
 
             - name: Run Markdown Linter and fix if possible
               uses: DavidAnson/markdownlint-cli2-action@main
