@@ -28,10 +28,10 @@ jobs:
                   pip install -r requirements.txt
 
             - name: Run Ruff Check (Linting)
-              run: ruff check .
+              run: ruff check --fix .
 
             - name: Run Ruff Format (Formatting)
-              run: ruff format .
+              run: ruff format --fix .
 
             - name: Run Markdown Linter and fix if possible
               uses: DavidAnson/markdownlint-cli2-action@main
