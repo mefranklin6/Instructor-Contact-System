@@ -161,6 +161,16 @@ def test_parse_email_addresses_supports_common_separators() -> None:
     assert result == ["first@test.edu", "second@test.edu", "third@test.edu"]
 
 
+def test_parse_email_addresses_returns_empty_for_none() -> None:
+    """parse_email_addresses returns [] for None input."""
+    assert InstructorContactSystemCore.parse_email_addresses(None) == []
+
+
+def test_parse_email_addresses_returns_empty_for_empty_string() -> None:
+    """parse_email_addresses returns [] for empty string input."""
+    assert InstructorContactSystemCore.parse_email_addresses("") == []
+
+
 def test_send_message_to_classroom_passes_cc_addresses() -> None:
     """Classroom sends include CC recipients for each outbound email."""
     df = pd.DataFrame(
