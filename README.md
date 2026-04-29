@@ -19,6 +19,16 @@ For many years, Chico State Classroom Technology Services conducted early-semest
 
 This system automates that process while expanding its capabilities.
 
+## AI Disclosure
+
+AI was used to:
+
+- Perform code reviews of human-written code
+- Proofread documentation and suggest edits
+- Assist with human-led backend development as a tool. Every line it generated was thoroughly reviewed or improved upon by a human developer.
+- Generate code for the front-end GUI and aesthetic components
+- Generate the unit tests
+
 ## Core Capabilities
 
 ### Two-Way Communication Model
