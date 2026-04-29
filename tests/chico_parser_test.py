@@ -1,7 +1,6 @@
 """Tests for SupportedLocationsParser edge cases."""
 
 import pandas as pd
-import pytest
 
 from plugins.chico_supported_location_parser import SupportedLocationsParser  # pyright: ignore[reportMissingImports]
 

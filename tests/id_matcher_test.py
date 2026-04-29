@@ -3,7 +3,6 @@
 import json
 
 import pandas as pd
-import pytest
 
 from plugins.id_matcher_from_zoom_users_csv import Matcher as ZoomMatcher  # pyright: ignore[reportMissingImports]
 from plugins.id_matcher_from_ad_json import Matcher as AdJsonMatcher  # pyright: ignore[reportMissingImports]

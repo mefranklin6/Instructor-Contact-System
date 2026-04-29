@@ -1,7 +1,5 @@
 """Tests for Settings.from_env()."""
 
-import pytest
-
 from src.core.settings import Settings
 
 
