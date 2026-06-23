@@ -185,10 +185,10 @@ class InstructorContactFletApp:
             )
 
             cc_input = ft.TextField(
-                label="CC:",
+                label="Summary recipient(s)",
                 width=720,
-                prefix_icon=ft.Icons.COPY,
-                hint_text="Optional: comma-separated email addresses",
+                prefix_icon=ft.Icons.EMAIL,
+                hint_text="Optional: comma-separated emails for one recap",
                 keyboard_type=ft.KeyboardType.EMAIL,
             )
 
@@ -300,14 +300,14 @@ class InstructorContactFletApp:
                     self._show_snack(page, f"Missing placeholder in message: {ke}")
                     return
 
-                cc_addresses = self.core.parse_email_addresses(cc_input.value)
-                cc_text = ", ".join(cc_addresses) if cc_addresses else "None"
+                summary_recipients = self.core.parse_email_addresses(cc_input.value)
+                summary_recipient_text = ", ".join(summary_recipients) if summary_recipients else "None"
 
                 recipients_text = "\n".join(emails)
                 confirm_body = (
                     f"Are you sure you want to send this message to these recipients?\n\n"
                     f"Subject:\n{subject_input.value}\n\n"
-                    f"CC:\n{cc_text}\n\n"
+                    f"Summary recipient(s):\n{summary_recipient_text}\n\n"
                     f"Message:\n{rendered_message}\n\n"
                     f"Recipients ({len(emails)}):\n{recipients_text}"
                 )
@@ -320,7 +320,7 @@ class InstructorContactFletApp:
                             room=room_input.value,
                             subject=subject_input.value,
                             message_template=message_input.value,
-                            cc_addresses=cc_addresses,
+                            cc_addresses=summary_recipients,
                             location_map=location_map,
                         )
                     except KeyError as ke:
@@ -335,6 +335,8 @@ class InstructorContactFletApp:
 Location: {result.location_key}
 Sent: {result.sent}
 Failed: {len(result.failed)}
+Summary reports sent: {result.summary_sent}
+Summary report failures: {len(result.summary_failed)}
 """
                     if result.failed:
                         summary += "\nFailed recipients:\n" + "\n".join(
@@ -342,6 +344,15 @@ Failed: {len(result.failed)}
                         )
                         if len(result.failed) > self.core.max_failed_display:
                             summary += f"\n...and {len(result.failed) - self.core.max_failed_display} more"
+
+                    if result.summary_failed:
+                        summary += "\n\nSummary report failures:\n" + "\n".join(
+                            result.summary_failed[: self.core.max_failed_display]
+                        )
+                        if len(result.summary_failed) > self.core.max_failed_display:
+                            summary += (
+                                f"\n...and {len(result.summary_failed) - self.core.max_failed_display} more"
+                            )
 
                     dialog = ft.AlertDialog(
                         title=ft.Text("Send complete"),

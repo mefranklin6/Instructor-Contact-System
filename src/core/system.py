@@ -27,12 +27,25 @@ MAX_FAILED_DISPLAY_DEFAULT = 50
 
 
 @dataclass(frozen=True, slots=True)
+class ClassroomRecipientResult:
+    """Result for one classroom recipient send attempt."""
+
+    email: str
+    success: bool
+    sent_at: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ClassroomSendResult:
     """Summary of sending a classroom message."""
 
     location_key: str
     sent: int
     failed: list[str]
+    recipient_results: list[ClassroomRecipientResult]
+    summary_recipients: list[str]
+    summary_sent: int
+    summary_failed: list[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +163,50 @@ class InstructorContactSystemCore:
 
         emails = [email.strip() for email in normalized.split(",") if email.strip()]
         return InstructorContactSystemCore.dedupe_emails(emails)
+
+    @staticmethod
+    def _timestamp() -> str:
+        """Return a human-readable timestamp for email reports."""
+        return datetime.now().isoformat(timespec="seconds")
+
+    @staticmethod
+    def _build_classroom_summary_report(
+        *,
+        location_key: str,
+        subject: str,
+        message: str,
+        generated_at: str,
+        recipient_results: list[ClassroomRecipientResult],
+    ) -> str:
+        """Build the summary report sent to classroom message report recipients."""
+        sent_count = sum(1 for result in recipient_results if result.success)
+        total_count = len(recipient_results)
+
+        result_lines: list[str] = []
+        for result in recipient_results:
+            if result.success:
+                result_lines.append(f"- {result.email}: sent successfully at {result.sent_at}")
+            else:
+                result_lines.append(f"- {result.email}: failed")
+
+        return f"""Classroom Message Summary
+
+Sent the below message to the following instructors at {generated_at}.
+
+{sent_count} out of {total_count} messages sent successfully.
+
+Individual results:
+{chr(10).join(result_lines)}
+
+Location:
+{location_key}
+
+Subject:
+{subject}
+
+Message:
+{message}
+"""
 
     def get_aggregated_data_for_date_range(
         self, start_date: datetime | None = None, end_date: datetime | None = None
@@ -453,12 +510,15 @@ Files:
         except KeyError as ke:
             raise ValueError(f"Missing placeholder in message: {ke}") from ke
 
-        cc_addresses = self.dedupe_emails(
+        summary_recipients = self.dedupe_emails(
             [address.strip() for address in (cc_addresses or []) if address.strip()]
         )
 
         sent_count = 0
         failed: list[str] = []
+        recipient_results: list[ClassroomRecipientResult] = []
+        summary_sent = 0
+        summary_failed: list[str] = []
 
         self.load_contact_history()
 
@@ -466,18 +526,22 @@ Files:
             for email in emails:
                 ok = False
                 try:
-                    ok = bool(self.email_sender.send(email, subject, message, cc_addrs=cc_addresses))
-                    log.info(
-                        "Sent: %s, subject: %s, cc: %s, message: %s",
-                        email,
-                        subject,
-                        cc_addresses,
-                        message,
-                    )
+                    ok = bool(self.email_sender.send(email, subject, message))
+                    if ok:
+                        log.info(
+                            "Sent: %s, subject: %s, summary recipients: %s, message: %s",
+                            email,
+                            subject,
+                            summary_recipients,
+                            message,
+                        )
+                    else:
+                        log.warning("Email sender returned false for %s", email)
                 except Exception as e:
                     log.error(f"Email send failed to {email}: {e}")
 
                 if ok:
+                    sent_at = self._timestamp()
                     existing = self.contacted_instructors.get(email, {})
                     if not isinstance(existing, dict):
                         existing = {}
@@ -486,25 +550,69 @@ Files:
                         history = []
                     history.append(
                         {
-                            "sent_at": datetime.now().isoformat(),
+                            "sent_at": sent_at,
                             "locations": location_key,
                             "contact_type": "all instructors for classroom",
                             "message": message,
-                            "cc": cc_addresses,
+                            "summary_recipients": summary_recipients,
                         }
                     )
                     existing["classroom_messages"] = history
                     self.contacted_instructors[email] = existing
                     sent_count += 1
+                    recipient_results.append(
+                        ClassroomRecipientResult(email=email, success=True, sent_at=sent_at)
+                    )
                 else:
                     failed.append(email)
+                    recipient_results.append(ClassroomRecipientResult(email=email, success=False))
+
+            if summary_recipients:
+                generated_at = self._timestamp()
+                summary_subject = f"Summary: {subject}"
+                summary_message = self._build_classroom_summary_report(
+                    location_key=location_key,
+                    subject=subject,
+                    message=message,
+                    generated_at=generated_at,
+                    recipient_results=recipient_results,
+                )
+                for summary_recipient in summary_recipients:
+                    try:
+                        ok = bool(
+                            self.email_sender.send(
+                                summary_recipient,
+                                summary_subject,
+                                summary_message,
+                            )
+                        )
+                    except Exception as e:
+                        log.error(f"Classroom summary email failed to {summary_recipient}: {e}")
+                        ok = False
+
+                    if ok:
+                        summary_sent += 1
+                    else:
+                        summary_failed.append(summary_recipient)
         else:
-            log.info("DEV MODE: Would have sent messages to %s with cc %s", emails, cc_addresses)
+            log.info(
+                "DEV MODE: Would have sent messages to %s with summary recipients %s",
+                emails,
+                summary_recipients,
+            )
 
         if not self.settings.dev_mode:
             self.save_contact_history()
 
-        return ClassroomSendResult(location_key=location_key, sent=sent_count, failed=failed)
+        return ClassroomSendResult(
+            location_key=location_key,
+            sent=sent_count,
+            failed=failed,
+            recipient_results=recipient_results,
+            summary_recipients=summary_recipients,
+            summary_sent=summary_sent,
+            summary_failed=summary_failed,
+        )
 
     def compute_semester_deployment_candidates(self) -> list[dict[str, Any]]:
         """Return instructors that have not yet been contacted this semester."""
