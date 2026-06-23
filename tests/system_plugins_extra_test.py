@@ -84,8 +84,18 @@ def test_create_schedule_loader_fl_csv_raises_on_stale_file(tmp_path):
     """create_schedule_loader raises RuntimeError when the FL CSV is stale."""
     fl_path = tmp_path / "fl.csv"
     pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "1", "CLASS_START_DATE": "01-Jan-25", "CLASS_END_DATE": "31-Jan-25",
-          "START_TIME1": "09:00", "END_TIME1": "09:50", "DAYS1": "M", "BUILDING": "SCI", "ROOM": "101"}]
+        [
+            {
+                "INSTRUCTOR1_EMPLID": "1",
+                "CLASS_START_DATE": "01-Jan-25",
+                "CLASS_END_DATE": "31-Jan-25",
+                "START_TIME1": "09:00",
+                "END_TIME1": "09:50",
+                "DAYS1": "M",
+                "BUILDING": "SCI",
+                "ROOM": "101",
+            }
+        ]
     ).to_csv(fl_path, index=False)
     old_time = time.time() - (31 * 24 * 60 * 60)
     os.utime(fl_path, (old_time, old_time))
