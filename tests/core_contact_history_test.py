@@ -66,9 +66,7 @@ def _build_core(df, mapping, *, dev_mode=True, fail_addrs=None, raise_addrs=None
     return core
 
 
-_SIMPLE_DF = pd.DataFrame(
-    [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-)
+_SIMPLE_DF = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
 
 
 # ---------------------------------------------------------------------------
@@ -161,9 +159,7 @@ def test_send_test_email_dev_mode_returns_log_message():
 def test_send_message_to_classroom_non_dev_updates_history(tmp_path, monkeypatch):
     """Non-dev classroom send records the contact in contacted_instructors."""
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=False)
 
     result = core.send_message_to_classroom(
@@ -182,12 +178,8 @@ def test_send_message_to_classroom_non_dev_updates_history(tmp_path, monkeypatch
 def test_send_message_to_classroom_non_dev_records_failure(tmp_path, monkeypatch):
     """Non-dev classroom send records failed recipients."""
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
-    core = _build_core(
-        df, {"000000001": "alice@test.edu"}, dev_mode=False, fail_addrs={"alice@test.edu"}
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
+    core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=False, fail_addrs={"alice@test.edu"})
 
     result = core.send_message_to_classroom(
         building="SCI", room="101", subject="Test", message_template="Hello from {location}"
@@ -204,9 +196,7 @@ def test_send_message_to_classroom_non_dev_records_failure(tmp_path, monkeypatch
 
 def test_send_message_to_classroom_bad_template_raises():
     """send_message_to_classroom raises ValueError for unrecognised placeholders."""
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"})
 
     with pytest.raises(ValueError, match="Missing placeholder"):
@@ -220,9 +210,7 @@ def test_send_message_to_classroom_bad_template_raises():
 
 def test_execute_deployment_bad_template_raises():
     """execute_deployment raises ValueError for unrecognised template placeholders."""
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"})
     candidates = core.compute_semester_deployment_candidates()
 
@@ -243,12 +231,8 @@ def test_execute_deployment_bad_template_raises():
 def test_execute_deployment_non_dev_records_send_failure(tmp_path, monkeypatch):
     """execute_deployment in non-dev mode records instructors whose sends raise an exception."""
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
-    core = _build_core(
-        df, {"000000001": "alice@test.edu"}, dev_mode=False, raise_addrs={"alice@test.edu"}
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
+    core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=False, raise_addrs={"alice@test.edu"})
 
     candidates = core.compute_semester_deployment_candidates()
     result = core.execute_deployment(
@@ -339,16 +323,12 @@ def test_get_aggregated_data_for_date_range_with_loader():
 
     class _FakeLoader:
         def range_data(self, start, end):
-            return pd.DataFrame(
-                [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-            )
+            return pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
 
     core = _build_core(_SIMPLE_DF, {"000000001": "alice@test.edu"})
     core.loader = _FakeLoader()
 
-    by_instr, by_loc = core.get_aggregated_data_for_date_range(
-        datetime(2025, 1, 1), datetime(2025, 1, 31)
-    )
+    by_instr, by_loc = core.get_aggregated_data_for_date_range(datetime(2025, 1, 1), datetime(2025, 1, 31))
     assert "000000001" in by_instr
     assert "SCI 101" in by_loc
 
@@ -374,9 +354,7 @@ def test_get_aggregated_data_raises_when_loader_returns_empty():
 
 def test_send_message_to_classroom_raises_when_no_emails_match():
     """send_message_to_classroom raises ValueError when no instructor has an email."""
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     # Empty mapping: no IDs resolve to emails
     core = _build_core(df, {})
 
@@ -389,12 +367,8 @@ def test_send_message_to_classroom_raises_when_no_emails_match():
 def test_send_message_to_classroom_non_dev_handles_send_exception(tmp_path, monkeypatch):
     """send_message_to_classroom handles and records exceptions raised by the sender."""
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
-    core = _build_core(
-        df, {"000000001": "alice@test.edu"}, dev_mode=False, raise_addrs={"alice@test.edu"}
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
+    core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=False, raise_addrs={"alice@test.edu"})
 
     result = core.send_message_to_classroom(
         building="SCI", room="101", subject="Test", message_template="Hello from {location}"
@@ -408,9 +382,7 @@ def test_send_message_to_classroom_non_dev_handles_send_exception(tmp_path, monk
 def test_send_message_to_classroom_dev_mode_does_not_send(tmp_path, monkeypatch):
     """send_message_to_classroom in dev mode logs but returns zero sent."""
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=True)
 
     result = core.send_message_to_classroom(
@@ -619,9 +591,7 @@ def test_send_message_to_classroom_handles_malformed_history(tmp_path, monkeypat
     import json as _json
 
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=False)
     # Write malformed contact history to disk so load_contact_history picks it up
     (tmp_path / "contact_history.json").write_text(
@@ -641,9 +611,7 @@ def test_send_message_to_classroom_handles_non_list_classroom_messages(tmp_path,
     import json as _json
 
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=False)
     # classroom_messages is a string (not a list) → triggers history = [] reset
     (tmp_path / "contact_history.json").write_text(
@@ -661,9 +629,7 @@ def test_send_message_to_classroom_handles_non_list_classroom_messages(tmp_path,
 def test_execute_deployment_handles_malformed_contacted_record(tmp_path, monkeypatch):
     """execute_deployment resets non-dict existing contact records gracefully."""
     monkeypatch.chdir(tmp_path)
-    df = pd.DataFrame(
-        [{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}]
-    )
+    df = pd.DataFrame([{"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"}])
     core = _build_core(df, {"000000001": "alice@test.edu"}, dev_mode=True)
     # Pre-populate with a non-dict entry
     core.contacted_instructors = {"alice@test.edu": "not-a-dict"}  # triggers reset (line 579)
@@ -686,4 +652,3 @@ def test_execute_deployment_handles_malformed_contacted_record(tmp_path, monkeyp
 
     assert result.contacted_this_batch == 1
     assert core.contacted_instructors["alice@test.edu"]["contact_type"] == "start of semester"
-

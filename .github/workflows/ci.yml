@@ -1,43 +1,43 @@
 name: CI
 
 permissions:
-    contents: read
+  contents: read
 
 on:
-    push:
-        branches: ["main"]
-    pull_request:
-        branches: ["main"]
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Set up Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.14"
-                  cache: "pip" # Speeds up subsequent runs
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip" # Speeds up subsequent runs
 
-            - name: Install dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-            - name: Run Ruff Check (Linting)
-              run: ruff check --fix .
+      - name: Run Ruff Check (Linting)
+        run: ruff check --fix .
 
-            - name: Run Ruff Format (Formatting)
-              run: ruff format .
+      - name: Run Ruff Format (Formatting)
+        run: ruff format .
 
-            - name: Run Markdown Linter and fix if possible
-              uses: DavidAnson/markdownlint-cli2-action@main
-              with:
-                  fix: true
-                  globs: "**/*.md"
+      - name: Run Markdown Linter and fix if possible
+        uses: DavidAnson/markdownlint-cli2-action@main
+        with:
+          fix: true
+          globs: "**/*.md"
 
-            - name: Run Tests with Pytest
-              run: pytest
+      - name: Run Tests with Pytest
+        run: pytest
