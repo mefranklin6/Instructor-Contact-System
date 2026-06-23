@@ -153,7 +153,7 @@ def test_lookup_classroom_emails_no_email_match_raises() -> None:
 
 
 def test_parse_email_addresses_supports_common_separators() -> None:
-    """parse_email_addresses splits, trims, and deduplicates CC input."""
+    """parse_email_addresses splits, trims, and deduplicates summary recipient input."""
     result = InstructorContactSystemCore.parse_email_addresses(
         " first@test.edu, second@test.edu; third@test.edu\nfirst@test.edu "
     )
@@ -171,8 +171,8 @@ def test_parse_email_addresses_returns_empty_for_empty_string() -> None:
     assert InstructorContactSystemCore.parse_email_addresses("") == []
 
 
-def test_send_message_to_classroom_passes_cc_addresses() -> None:
-    """Classroom sends include CC recipients for each outbound email."""
+def test_send_message_to_classroom_sends_one_summary_per_report_recipient() -> None:
+    """Classroom sends keep instructor emails un-CC'd and send separate summaries."""
     df = pd.DataFrame(
         [
             {"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"},
@@ -194,27 +194,73 @@ def test_send_message_to_classroom_passes_cc_addresses() -> None:
     )
 
     assert result.sent == 2
+    assert result.failed == []
+    assert result.summary_recipients == ["support@test.edu", "manager@test.edu"]
+    assert result.summary_sent == 2
+    assert result.summary_failed == []
     if not core.email_sender:
         raise RuntimeError("Email sender is not configured")
 
-    assert core.email_sender.sent == [
+    assert len(core.email_sender.sent) == 4
+    assert core.email_sender.sent[:2] == [
         (
             "alice@test.edu",
             "Projector update",
             "Hello from SCI 101",
-            ["support@test.edu", "manager@test.edu"],
+            [],
         ),
         (
             "bob@test.edu",
             "Projector update",
             "Hello from SCI 101",
-            ["support@test.edu", "manager@test.edu"],
+            [],
         ),
     ]
-    assert core.contacted_instructors["alice@test.edu"]["classroom_messages"][0]["cc"] == [
+    assert core.email_sender.sent[2][0] == "support@test.edu"
+    assert core.email_sender.sent[2][1] == "Summary: Projector update"
+    assert "2 out of 2 messages sent successfully" in core.email_sender.sent[2][2]
+    assert "alice@test.edu: sent successfully at" in core.email_sender.sent[2][2]
+    assert "bob@test.edu: sent successfully at" in core.email_sender.sent[2][2]
+    assert core.email_sender.sent[3][0] == "manager@test.edu"
+    assert core.email_sender.sent[3][1] == "Summary: Projector update"
+    assert core.contacted_instructors["alice@test.edu"]["classroom_messages"][0]["summary_recipients"] == [
         "support@test.edu",
         "manager@test.edu",
     ]
+
+
+def test_send_message_to_classroom_summary_includes_failed_instructors() -> None:
+    """Classroom summary reports include failed instructor sends."""
+    df = pd.DataFrame(
+        [
+            {"INSTRUCTOR1_EMPLID": "000000001", "BUILDING": "SCI", "ROOM": "101"},
+            {"INSTRUCTOR1_EMPLID": "000000002", "BUILDING": "SCI", "ROOM": "101"},
+        ]
+    )
+    mapping = {
+        "000000001": "alice@test.edu",
+        "000000002": "bob@test.edu",
+    }
+    core = _build_core(df, mapping, dev_mode=False, should_fail_emails={"bob@test.edu"})
+
+    result = core.send_message_to_classroom(
+        building="SCI",
+        room="101",
+        subject="Projector update",
+        message_template="Hello from {location}",
+        cc_addresses=["support@test.edu"],
+    )
+
+    assert result.sent == 1
+    assert result.failed == ["bob@test.edu"]
+    assert result.summary_sent == 1
+    if not core.email_sender:
+        raise RuntimeError("Email sender is not configured")
+
+    summary_message = core.email_sender.sent[-1][2]
+    assert "1 out of 2 messages sent successfully" in summary_message
+    assert "alice@test.edu: sent successfully at" in summary_message
+    assert "bob@test.edu: failed" in summary_message
 
 
 # ---- By Instructor ----
