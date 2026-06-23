@@ -7,6 +7,9 @@ services:
       - .env
     volumes:
       - contact-data:/data
+      - type: bind
+        source: .
+        target: /app
 
 volumes:
   contact-data:
